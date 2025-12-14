@@ -6,8 +6,8 @@ from django.utils.translation import gettext_lazy as _
 
 class LocationHistory(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='location_history')
-    latitude = models.DecimalField(max_digits=9, decimal_places=6)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    latitude = models.DecimalField(max_digits=12, decimal_places=8)
+    longitude = models.DecimalField(max_digits=12, decimal_places=8)
     accuracy = models.FloatField(help_text=_('Location accuracy in meters'))
     altitude = models.FloatField(null=True, blank=True)
     speed = models.FloatField(null=True, blank=True, help_text=_('Speed in m/s'))

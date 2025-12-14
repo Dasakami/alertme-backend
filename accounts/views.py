@@ -2,7 +2,8 @@ from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
+from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import SMSVerification, UserDevice
 from .serializers import (
@@ -31,7 +32,8 @@ class UserRegistrationView(generics.CreateAPIView):
             'tokens': {
                 'refresh': str(refresh),
                 'access': str(refresh.access_token),
-            }
+            },
+            'message': 'Registration successful. Please verify your phone number.'
         }, status=status.HTTP_201_CREATED)
 
 
@@ -49,7 +51,8 @@ class SendSMSVerificationView(generics.CreateAPIView):
         
         return Response({
             'detail': 'Verification code sent',
-            'phone_number': str(sms_verification.phone_number)
+            'phone_number': str(sms_verification.phone_number),
+            'code': sms_verification.code  # ДЛЯ ТЕСТИРОВАНИЯ! Убрать в продакшене
         })
 
 
@@ -87,6 +90,57 @@ class VerifySMSView(generics.CreateAPIView):
                 'detail': 'Phone verified. Please complete registration.',
                 'phone_verified': True
             })
+
+
+# ═══════════════════════════════════════════════════════════════
+# КАСТОМНЫЙ LOGIN - авторизация по phone_number
+# ═══════════════════════════════════════════════════════════════
+class CustomTokenObtainView(APIView):
+    """
+    Кастомная авторизация по номеру телефона
+    POST /api/auth/login/
+    {
+        "phone_number": "+996705352515",
+        "password": "password123"
+    }
+    """
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        phone_number = request.data.get('phone_number')
+        password = request.data.get('password')
+        
+        if not phone_number or not password:
+            return Response(
+                {'error': 'Phone number and password are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Используем наш кастомный backend
+        user = authenticate(request, phone_number=phone_number, password=password)
+        
+        if user is None:
+            return Response(
+                {'error': 'Invalid phone number or password'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        if not user.is_active:
+            return Response(
+                {'error': 'User account is disabled'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Генерируем JWT токены
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        })
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):
@@ -132,9 +186,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         user = request.user
         user.is_active = False
         user.save()
-        
-        # In production, might want to anonymize instead of delete
-        # user.delete()
         
         return Response({'detail': 'Account deactivated'})
 

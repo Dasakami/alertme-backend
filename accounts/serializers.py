@@ -4,6 +4,7 @@ from .models import SMSVerification, UserDevice
 from django.utils import timezone
 from datetime import timedelta
 import random
+from django.conf import settings
 
 User = get_user_model()
 
@@ -35,16 +36,35 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class SendSMSSerializer(serializers.Serializer):
     phone_number = serializers.CharField()
+    
     def create(self, validated_data):
         phone_number = validated_data['phone_number']
-        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        
+        # ═══════════════════════════════════════════════════════════
+        # ТЕСТОВЫЙ КОД 123456 (пока нет SMS API)
+        # ═══════════════════════════════════════════════════════════
+        code = '123456'  # ТЕСТОВЫЙ КОД
+        
+        # В продакшене будет:
+        # code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        
         expires_at = timezone.now() + timedelta(minutes=10)
+        
+        # Удаляем старые неверифицированные коды для этого номера
+        SMSVerification.objects.filter(
+            phone_number=phone_number,
+            is_verified=False
+        ).delete()
         
         sms_verification = SMSVerification.objects.create(
             phone_number=phone_number,
             code=code,
             expires_at=expires_at
         )
+        
+        print(f"✅ ТЕСТОВЫЙ КОД для {phone_number}: {code}")
+        print(f"⏰ Истекает: {expires_at}")
+        
         return sms_verification
 
 
@@ -64,7 +84,7 @@ class VerifySMSSerializer(serializers.Serializer):
                 expires_at__gt=timezone.now()
             ).latest('created_at')
         except SMSVerification.DoesNotExist:
-            raise serializers.ValidationError('Invalid or expired code')
+            raise serializers.ValidationError('Неверный или истекший код')
         
         attrs['sms_verification'] = sms_verification
         return attrs
@@ -73,8 +93,8 @@ class VerifySMSSerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ['id', 'phone_number', 'email', 'avatar', 'language', 
-                  'is_phone_verified', 'created_at']
+        fields = ['id', 'phone_number', 'email', 'first_name', 'last_name', 
+                  'avatar', 'language', 'is_phone_verified', 'created_at']
         read_only_fields = ['id', 'is_phone_verified', 'created_at']
 
 
@@ -94,3 +114,4 @@ class UserDeviceSerializer(serializers.ModelSerializer):
             defaults=validated_data
         )
         return device
+

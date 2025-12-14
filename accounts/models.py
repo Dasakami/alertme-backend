@@ -2,16 +2,14 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from phonenumber_field.modelfields import PhoneNumberField
 from django.utils.translation import gettext_lazy as _
+import uuid
 
 
 class CustomUserManager(BaseUserManager):
-    
     def create_user(self, phone_number, password=None, **extra_fields):
         if not phone_number:
             raise ValueError(_('The Phone Number must be set'))
-        
-        username = str(phone_number).replace('+', '').replace(' ', '').replace('-', '')
-        extra_fields.setdefault('username', username)
+        extra_fields.setdefault('username', str(uuid.uuid4()))
         
         user = self.model(phone_number=phone_number, **extra_fields)
         user.set_password(password)
@@ -32,8 +30,11 @@ class CustomUserManager(BaseUserManager):
 
 
 class User(AbstractUser):
-    username = models.CharField(max_length=150, unique=True, blank=True, null=True)
-
+    # Username существует (нужен для Django), но НЕ используется
+    # Генерируется автоматически как UUID
+    username = models.CharField(max_length=150, unique=True, null=True, blank=True)
+    
+    # ГЛАВНОЕ ПОЛЕ для авторизации
     phone_number = PhoneNumberField(unique=True, verbose_name=_('Phone Number'))
     email = models.EmailField(blank=True, null=True, verbose_name=_('Email'))
     
@@ -48,7 +49,7 @@ class User(AbstractUser):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     USERNAME_FIELD = 'phone_number'
-    REQUIRED_FIELDS = []  
+    REQUIRED_FIELDS = []
     
     objects = CustomUserManager()
 
@@ -60,8 +61,9 @@ class User(AbstractUser):
         return str(self.phone_number)
     
     def save(self, *args, **kwargs):
+        # Если username пустой, генерируем UUID
         if not self.username:
-            self.username = str(self.phone_number).replace('+', '').replace(' ', '').replace('-', '')
+            self.username = str(uuid.uuid4())
         super().save(*args, **kwargs)
 
 

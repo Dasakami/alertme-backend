@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY', default='your-secret-key-change-in-production')
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.68.219,10.122.0.53').split(',')
 INSTALLED_APPS = [
     'daphne',
     'django.contrib.admin',
@@ -135,6 +135,11 @@ if USE_S3:
     AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
+
+AUTHENTICATION_BACKENDS = [
+    'accounts.backends.PhoneNumberBackend',  # Наш кастомный backend
+    'django.contrib.auth.backends.ModelBackend',  # Стандартный (для админки)
+]
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.User'
 

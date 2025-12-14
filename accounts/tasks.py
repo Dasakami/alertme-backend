@@ -14,13 +14,24 @@ def send_verification_sms(sms_verification_id):
         phone = str(sms_verification.phone_number)
         code = sms_verification.code
         
-        message = f"Ваш код подтверждения: {code}\n\nSafety App"
+        # ═══════════════════════════════════════════════════════════
+        # ПОКА ПРОСТО ВЫВОДИМ В КОНСОЛЬ
+        # ═══════════════════════════════════════════════════════════
+        print(f"")
+        print(f"═════════════════════════════════════════════")
+        print(f"📱 SMS КОД ДЛЯ: {phone}")
+        print(f"🔐 КОД: {code}")
+        print(f"⏰ Действителен 10 минут")
+        print(f"═════════════════════════════════════════════")
+        print(f"")
         
+        # ВРЕМЕННО ОТКЛЮЧЕНО - когда купите SMS API, раскомментируйте:
+        """
         if not settings.SMS_API_KEY:
-            print(f"SMS API not configured. Code: {code}")
             return False
         
-        # SMS.kg API integration
+        message = f"Ваш код подтверждения: {code}\n\nSafety App"
+        
         response = requests.post(
             settings.SMS_API_URL,
             json={
@@ -32,12 +43,15 @@ def send_verification_sms(sms_verification_id):
         )
         
         if response.status_code == 200:
-            print(f"SMS sent to {phone}")
+            print(f"✅ SMS отправлен на {phone}")
             return True
         else:
-            print(f"SMS failed: {response.text}")
+            print(f"❌ SMS ошибка: {response.text}")
             return False
+        """
+        
+        return True  # Возвращаем успех для тестового режима
             
     except Exception as e:
-        print(f"Error sending SMS: {e}")
+        print(f"❌ Ошибка отправки SMS: {e}")
         return False
