@@ -3,31 +3,67 @@ from django.contrib.auth import get_user_model
 from .models import SMSVerification, UserDevice
 from django.utils import timezone
 from datetime import timedelta
-
+from phonenumber_field.serializerfields import PhoneNumberField as PhoneNumberSerializerField
 
 User = get_user_model()
 
 
-
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=True, min_length=6)
-    password_confirm = serializers.CharField(write_only=True, required=True)
+    """
+    Регистрация нового пользователя
+    
+    Требуется только: phone_number, password
+    """
+    phone_number = PhoneNumberSerializerField(
+        help_text='Формат: +996555123456 или 996555123456'
+    )
+    password = serializers.CharField(
+        write_only=True, 
+        required=True, 
+        min_length=6,
+        style={'input_type': 'password'}
+    )
+    password_confirm = serializers.CharField(
+        write_only=True, 
+        required=True,
+        style={'input_type': 'password'}
+    )
 
     class Meta:
         model = User
         fields = ['phone_number', 'password', 'password_confirm', 'email', 'language']
 
+    def validate_phone_number(self, value):
+        """Валидация номера телефона"""
+        # Конвертируем в строку для проверки
+        phone_str = str(value)
+        
+        # Проверяем что номер начинается с +996
+        if not phone_str.startswith('+996'):
+            raise serializers.ValidationError(
+                'Номер должен начинаться с +996 (например: +996555123456)'
+            )
+        
+        # Проверяем длину (должно быть 13 символов: +996XXXXXXXXX)
+        if len(phone_str) != 13:
+            raise serializers.ValidationError(
+                'Неверный формат номера. Должно быть 9 цифр после +996'
+            )
+        
+        return value
+
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError({'password': 'Passwords do not match'})
+            raise serializers.ValidationError({
+                'password': 'Пароли не совпадают'
+            })
         return attrs
 
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
-        phone_str = str(validated_data['phone_number']).replace('+', '').replace(' ', '')
-        validated_data['username'] = phone_str
         
+        # username генерируется автоматически в модели
         user = User.objects.create(**validated_data)
         user.set_password(password)
         user.save()
@@ -35,22 +71,36 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 
 class SendSMSSerializer(serializers.Serializer):
-    phone_number = serializers.CharField()
+    """Отправка SMS кода"""
+    phone_number = PhoneNumberSerializerField(
+        help_text='Формат: +996555123456'
+    )
+    
+    def validate_phone_number(self, value):
+        """Валидация номера"""
+        phone_str = str(value)
+        
+        if not phone_str.startswith('+996'):
+            raise serializers.ValidationError(
+                'Номер должен начинаться с +996'
+            )
+        
+        if len(phone_str) != 13:
+            raise serializers.ValidationError(
+                'Неверный формат номера'
+            )
+        
+        return value
     
     def create(self, validated_data):
         phone_number = validated_data['phone_number']
         
-        # ═══════════════════════════════════════════════════════════
-        # ТЕСТОВЫЙ КОД 123456 (пока нет SMS API)
-        # ═══════════════════════════════════════════════════════════
-        code = '123456'  # ТЕСТОВЫЙ КОД
-        
-        # В продакшене будет:
-        # code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        # ТЕСТОВЫЙ КОД 123456
+        code = '123456'
         
         expires_at = timezone.now() + timedelta(minutes=10)
         
-        # Удаляем старые неверифицированные коды для этого номера
+        # Удаляем старые неверифицированные коды
         SMSVerification.objects.filter(
             phone_number=phone_number,
             is_verified=False
@@ -69,7 +119,7 @@ class SendSMSSerializer(serializers.Serializer):
 
 
 class VerifySMSSerializer(serializers.Serializer):
-    phone_number = serializers.CharField()
+    phone_number = PhoneNumberSerializerField()
     code = serializers.CharField(max_length=6)
 
     def validate(self, attrs):
@@ -91,14 +141,50 @@ class VerifySMSSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    """Сериализатор профиля пользователя"""
+    
     class Meta:
         model = User
-        fields = ['id', 'phone_number', 'email', 'first_name', 'last_name', 
-                  'avatar', 'language', 'is_phone_verified', 'created_at']
-        read_only_fields = ['id', 'is_phone_verified', 'created_at']
+        fields = [
+            'id', 
+            'phone_number', 
+            'email', 
+            'first_name', 
+            'last_name', 
+            'telegram_username',  # НОВОЕ ПОЛЕ
+            'avatar', 
+            'language', 
+            'is_phone_verified', 
+            'created_at'
+        ]
+        read_only_fields = ['id', 'phone_number', 'is_phone_verified', 'created_at']
+    
+    def validate_telegram_username(self, value):
+        """Валидация Telegram username"""
+        if value:
+            # Убираем @ если пользователь его ввел
+            value = value.lstrip('@')
+            
+            # Проверяем что username состоит только из допустимых символов
+            if not value.replace('_', '').isalnum():
+                raise serializers.ValidationError(
+                    'Username может содержать только буквы, цифры и _'
+                )
+            
+            # Проверяем длину (5-32 символа в Telegram)
+            if len(value) < 5 or len(value) > 32:
+                raise serializers.ValidationError(
+                    'Username должен быть от 5 до 32 символов'
+                )
+        
+        return value
 
 
 class UserDeviceSerializer(serializers.ModelSerializer):
+    """
+    Опционально: для управления устройствами
+    Можно не использовать если не нужно
+    """
     class Meta:
         model = UserDevice
         fields = ['id', 'device_id', 'device_type', 'fcm_token', 'is_active', 'created_at']
@@ -114,4 +200,3 @@ class UserDeviceSerializer(serializers.ModelSerializer):
             defaults=validated_data
         )
         return device
-

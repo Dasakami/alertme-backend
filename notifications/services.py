@@ -44,143 +44,6 @@ class NotificationService:
         """Проверка настроек Telegram"""
         return bool(getattr(settings, 'TELEGRAM_BOT_TOKEN', None))
     
-    def send_sms(
-        self, 
-        to_phone: str, 
-        message: str,
-        telegram_username: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Отправка SMS через Twilio или Telegram
-        
-        Args:
-            to_phone: Номер телефона в формате +996...
-            message: Текст сообщения
-            telegram_username: Username в Telegram (для fallback)
-        
-        Returns:
-            {
-                'success': bool,
-                'method': 'twilio' | 'telegram' | 'failed',
-                'message_id': str | None,
-                'error': str | None
-            }
-        """
-        # Пробуем Twilio (если настроен)
-        if self.twilio_enabled:
-            try:
-                sms = self.twilio_client.messages.create(
-                    body=message,
-                    from_=settings.TWILIO_PHONE_NUMBER,
-                    to=to_phone
-                )
-                
-                logger.info(f"✅ SMS отправлено через Twilio: {to_phone}")
-                return {
-                    'success': True,
-                    'method': 'twilio',
-                    'message_id': sms.sid,
-                    'error': None
-                }
-            except Exception as e:
-                logger.error(f"❌ Ошибка Twilio SMS: {e}")
-                # Не падаем, пробуем Telegram fallback
-        
-        # Fallback на Telegram
-        if self.telegram_enabled and telegram_username:
-            try:
-                result = self._send_telegram_notification(
-                    telegram_username, 
-                    f"📱 SMS для {to_phone}:\n\n{message}"
-                )
-                
-                if result['success']:
-                    logger.info(f"✅ Уведомление отправлено через Telegram: @{telegram_username}")
-                    return {
-                        'success': True,
-                        'method': 'telegram',
-                        'message_id': result.get('message_id'),
-                        'error': None
-                    }
-            except Exception as e:
-                logger.error(f"❌ Ошибка Telegram: {e}")
-        
-        # Если ничего не сработало
-        logger.error(f"❌ Не удалось отправить уведомление на {to_phone}")
-        return {
-            'success': False,
-            'method': 'failed',
-            'message_id': None,
-            'error': 'No delivery method available'
-        }
-    
-    def make_call(
-        self, 
-        to_phone: str,
-        telegram_username: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Звонок через Twilio или уведомление в Telegram
-        
-        Args:
-            to_phone: Номер телефона
-            telegram_username: Username в Telegram (для fallback)
-        
-        Returns:
-            {
-                'success': bool,
-                'method': 'twilio' | 'telegram' | 'failed',
-                'call_id': str | None,
-                'error': str | None
-            }
-        """
-        # Пробуем Twilio
-        if self.twilio_enabled:
-            try:
-                call = self.twilio_client.calls.create(
-                    twiml=self._get_emergency_twiml(),
-                    from_=settings.TWILIO_PHONE_NUMBER,
-                    to=to_phone
-                )
-                
-                logger.info(f"✅ Звонок совершен через Twilio: {to_phone}")
-                return {
-                    'success': True,
-                    'method': 'twilio',
-                    'call_id': call.sid,
-                    'error': None
-                }
-            except Exception as e:
-                logger.error(f"❌ Ошибка Twilio звонка: {e}")
-        
-        # Fallback на Telegram
-        if self.telegram_enabled and telegram_username:
-            try:
-                result = self._send_telegram_notification(
-                    telegram_username,
-                    f"📞 ЭКСТРЕННЫЙ ЗВОНОК!\n\n"
-                    f"Попытка позвонить на {to_phone}\n"
-                    f"⚠️ ТРЕБУЕТСЯ НЕМЕДЛЕННАЯ РЕАКЦИЯ!"
-                )
-                
-                if result['success']:
-                    logger.info(f"✅ Уведомление о звонке через Telegram: @{telegram_username}")
-                    return {
-                        'success': True,
-                        'method': 'telegram',
-                        'call_id': result.get('message_id'),
-                        'error': None
-                    }
-            except Exception as e:
-                logger.error(f"❌ Ошибка Telegram: {e}")
-        
-        return {
-            'success': False,
-            'method': 'failed',
-            'call_id': None,
-            'error': 'No delivery method available'
-        }
-    
     def send_sos_alert(
         self,
         to_phone: str,
@@ -193,40 +56,100 @@ class NotificationService:
         """
         Отправка экстренного SOS уведомления
         
-        Автоматически выбирает лучший метод доставки
+        Args:
+            to_phone: Номер телефона контакта
+            user_name: Имя пользователя активировавшего SOS
+            latitude: Широта
+            longitude: Долгота
+            address: Адрес (опционально)
+            telegram_username: Username контакта в Telegram (для fallback)
         """
-        # Формируем сообщение
         message = self._format_sos_message(
             user_name, latitude, longitude, address
         )
         
-        # Отправляем SMS
-        sms_result = self.send_sms(to_phone, message, telegram_username)
+        # Приоритет 1: Twilio SMS
+        if self.twilio_enabled:
+            try:
+                sms = self.twilio_client.messages.create(
+                    body=message,
+                    from_=settings.TWILIO_PHONE_NUMBER,
+                    to=to_phone
+                )
+                
+                logger.info(f"✅ SOS отправлено через Twilio: {to_phone}")
+                return {
+                    'success': True,
+                    'method': 'twilio',
+                    'message_id': sms.sid,
+                }
+            except Exception as e:
+                logger.error(f"❌ Ошибка Twilio: {e}")
         
-        # Совершаем звонок (только если это основной контакт)
-        # call_result = self.make_call(to_phone, telegram_username)
+        # Приоритет 2: Telegram
+        if self.telegram_enabled and telegram_username:
+            result = self._send_telegram_sos(
+                telegram_username,
+                user_name,
+                latitude,
+                longitude,
+                address
+            )
+            
+            if result['success']:
+                logger.info(f"✅ SOS отправлено в Telegram: @{telegram_username}")
+                return result
         
+        # Не удалось отправить
+        logger.error(f"❌ Не удалось отправить SOS уведомление")
         return {
-            'sms': sms_result,
-            # 'call': call_result,
-            'success': sms_result['success']
+            'success': False,
+            'method': 'failed',
+            'error': 'No delivery method available'
         }
     
-    def _send_telegram_notification(
-        self, 
-        username: str, 
-        message: str
+    def _send_telegram_sos(
+        self,
+        username: str,
+        user_name: str,
+        latitude: float,
+        longitude: float,
+        address: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Отправка уведомления через Telegram бота"""
+        """Отправка SOS через Telegram с красивым форматированием"""
         try:
-            # Сначала пытаемся найти chat_id по username
+            # Получаем chat_id по username
             chat_id = self._get_chat_id_by_username(username)
             
             if not chat_id:
                 return {
                     'success': False,
-                    'error': f'Chat ID not found for @{username}'
+                    'error': f'Пользователь @{username} не найден. '
+                             'Попросите его написать /start боту.'
                 }
+            
+            # Google Maps ссылка
+            google_maps_url = (
+                f"https://www.google.com/maps/search/?api=1"
+                f"&query={latitude},{longitude}"
+            )
+            
+            # Форматируем сообщение
+            from datetime import datetime
+            message = (
+                "🚨 <b>ЭКСТРЕННАЯ ТРЕВОГА!</b>\n\n"
+                f"<b>{user_name}</b> активировал SOS!\n\n"
+                f"📍 <b>Местоположение:</b>\n"
+                f"<a href='{google_maps_url}'>Открыть на карте</a>\n\n"
+            )
+            
+            if address:
+                message += f"📮 <b>Адрес:</b> {address}\n\n"
+            
+            message += (
+                f"⏰ <b>Время:</b> {datetime.now().strftime('%H:%M, %d.%m.%Y')}\n\n"
+                f"❗ Это автоматическое уведомление из приложения AlertMe"
+            )
             
             # Отправляем сообщение
             url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -234,22 +157,26 @@ class NotificationService:
             response = requests.post(url, json={
                 'chat_id': chat_id,
                 'text': message,
-                'parse_mode': 'HTML'
+                'parse_mode': 'HTML',
+                'disable_web_page_preview': False
             }, timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
                 return {
                     'success': True,
+                    'method': 'telegram',
                     'message_id': data['result']['message_id']
                 }
             else:
+                logger.error(f"Telegram API error: {response.text}")
                 return {
                     'success': False,
-                    'error': response.text
+                    'error': f'Telegram API error: {response.status_code}'
                 }
         
         except Exception as e:
+            logger.error(f"Ошибка отправки в Telegram: {e}", exc_info=True)
             return {
                 'success': False,
                 'error': str(e)
@@ -257,11 +184,12 @@ class NotificationService:
     
     def _get_chat_id_by_username(self, username: str) -> Optional[int]:
         """
-        Получить chat_id по username
+        Получить chat_id по username из базы данных
         
-        Сохраняем в Redis для кэширования
+        Пользователь должен был написать /start боту
         """
         from django.core.cache import cache
+        from notifications.models import TelegramUser
         
         # Убираем @ если есть
         username = username.lstrip('@')
@@ -273,16 +201,20 @@ class NotificationService:
         if chat_id:
             return chat_id
         
-        # Если нет в кэше, проверяем базу
-        # (пользователь должен был написать боту /start)
-        from notifications.models import TelegramUser
-        
+        # Ищем в базе
         try:
-            tg_user = TelegramUser.objects.get(username=username)
-            cache.set(cache_key, tg_user.chat_id, 3600)  # 1 час
+            tg_user = TelegramUser.objects.get(
+                username__iexact=username,
+                is_active=True
+            )
+            # Кэшируем на 1 час
+            cache.set(cache_key, tg_user.chat_id, 3600)
             return tg_user.chat_id
         except TelegramUser.DoesNotExist:
-            logger.warning(f"Пользователь @{username} не найден в базе")
+            logger.warning(
+                f"Пользователь @{username} не найден в базе. "
+                f"Попросите его написать /start боту."
+            )
             return None
     
     def _format_sos_message(
@@ -292,7 +224,7 @@ class NotificationService:
         longitude: float,
         address: Optional[str] = None
     ) -> str:
-        """Форматирование SOS сообщения"""
+        """Форматирование SOS сообщения для SMS"""
         message = f"🚨 ЭКСТРЕННАЯ ТРЕВОГА!\n\n"
         message += f"{user_name} активировал SOS!\n\n"
         
@@ -311,19 +243,3 @@ class NotificationService:
         message += "❗ Это автоматическое сообщение из приложения AlertMe"
         
         return message
-    
-    def _get_emergency_twiml(self) -> str:
-        """TwiML для экстренного звонка"""
-        return '''<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="alice" language="ru-RU">
-        Внимание! Экстренный сигнал от приложения AlertMe. 
-        Ваш близкий человек активировал тревожную кнопку. 
-        Требуется немедленная помощь. 
-        Проверьте местоположение в SMS сообщении.
-    </Say>
-    <Pause length="2"/>
-    <Say voice="alice" language="ru-RU">
-        Повторяю. Это экстренный сигнал. Требуется помощь.
-    </Say>
-</Response>'''

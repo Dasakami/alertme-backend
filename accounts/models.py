@@ -9,7 +9,10 @@ class CustomUserManager(BaseUserManager):
     def create_user(self, phone_number, password=None, **extra_fields):
         if not phone_number:
             raise ValueError(_('The Phone Number must be set'))
-        extra_fields.setdefault('username', str(uuid.uuid4()))
+        
+        # Автоматически генерируем username как UUID
+        if 'username' not in extra_fields or not extra_fields.get('username'):
+            extra_fields['username'] = str(uuid.uuid4())
         
         user = self.model(phone_number=phone_number, **extra_fields)
         user.set_password(password)
@@ -30,13 +33,41 @@ class CustomUserManager(BaseUserManager):
 
 
 class User(AbstractUser):
-    # Username существует (нужен для Django), но НЕ используется
-    # Генерируется автоматически как UUID
-    username = models.CharField(max_length=150, unique=True, null=True, blank=True)
+    """
+    Кастомная модель пользователя
+    
+    ГЛАВНОЕ ПОЛЕ: phone_number (для авторизации)
+    username: автоматически генерируется как UUID (не используется пользователем)
+    telegram_username: пользователь вводит сам в настройках для SOS уведомлений
+    """
+    
+    # Username существует (требование Django), но генерируется автоматически
+    username = models.CharField(
+        max_length=150, 
+        unique=True, 
+        null=True, 
+        blank=True,
+        help_text='Автоматически генерируется, не используется пользователем'
+    )
     
     # ГЛАВНОЕ ПОЛЕ для авторизации
-    phone_number = PhoneNumberField(unique=True, verbose_name=_('Phone Number'))
+    phone_number = PhoneNumberField(
+        unique=True, 
+        verbose_name=_('Phone Number'),
+        help_text='Формат: +996XXXXXXXXX'
+    )
+    
+    # Опциональные поля
     email = models.EmailField(blank=True, null=True, verbose_name=_('Email'))
+    
+    # НОВОЕ: Telegram username для SOS уведомлений
+    telegram_username = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name='Telegram Username',
+        help_text='Ваш @username в Telegram (без @). Используется для SOS уведомлений.'
+    )
     
     is_phone_verified = models.BooleanField(default=False)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
@@ -45,9 +76,18 @@ class User(AbstractUser):
         choices=[('ru', 'Russian'), ('ky', 'Kyrgyz')], 
         default='ru'
     )
-    fcm_token = models.TextField(blank=True, null=True, verbose_name='Firebase Token')
+    
+    # FCM токен для push уведомлений
+    fcm_token = models.TextField(
+        blank=True, 
+        null=True, 
+        verbose_name='Firebase Token'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # Поле для авторизации
     USERNAME_FIELD = 'phone_number'
     REQUIRED_FIELDS = []
     
@@ -61,7 +101,7 @@ class User(AbstractUser):
         return str(self.phone_number)
     
     def save(self, *args, **kwargs):
-        # Если username пустой, генерируем UUID
+        # Автоматически генерируем username если его нет
         if not self.username:
             self.username = str(uuid.uuid4())
         super().save(*args, **kwargs)
@@ -84,6 +124,10 @@ class SMSVerification(models.Model):
 
 
 class UserDevice(models.Model):
+    """
+    Опционально: для управления устройствами и push уведомлениями
+    Можно удалить если не используется
+    """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='devices')
     device_id = models.CharField(max_length=255, unique=True)
     device_type = models.CharField(

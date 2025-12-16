@@ -1,7 +1,8 @@
-# telegram_notification_bot.py - ОБНОВЛЕННЫЙ БОТ
+# telegram_bot.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import os
 import secrets
 import logging
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, 
@@ -12,6 +13,7 @@ from telegram.ext import (
     ContextTypes
 )
 import django
+from asgiref.sync import sync_to_async
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'AlertMe.settings')
 django.setup()
@@ -30,25 +32,90 @@ PREMIUM_PLAN_ID = 2
 PRICE_IN_STARS = 100
 
 
+# ════════════════════════════════════════════════════════════
+# ASYNC ОБЕРТКИ ДЛЯ DJANGO ORM
+# ════════════════════════════════════════════════════════════
+
+@sync_to_async
+def save_telegram_user(chat_id, username, first_name, last_name):
+    """Сохранение пользователя Telegram в БД"""
+    try:
+        telegram_user, created = TelegramUser.objects.update_or_create(
+            chat_id=chat_id,
+            defaults={
+                'username': username,
+                'first_name': first_name,
+                'last_name': last_name,
+            }
+        )
+        return created
+    except Exception as e:
+        logger.error(f"❌ Ошибка сохранения пользователя: {e}")
+        return False
+
+
+@sync_to_async
+def get_premium_plan():
+    """Получение Premium плана"""
+    try:
+        return SubscriptionPlan.objects.get(id=PREMIUM_PLAN_ID)
+    except SubscriptionPlan.DoesNotExist:
+        # Создаем план если его нет
+        return SubscriptionPlan.objects.create(
+            id=PREMIUM_PLAN_ID,
+            name='Premium',
+            plan_type='personal_premium',
+            description='Premium подписка',
+            price_monthly=100,
+            max_contacts=999,
+            geozones_enabled=True,
+            location_history_enabled=True
+        )
+
+
+@sync_to_async
+def create_activation_code(code, plan, user_id):
+    """Создание кода активации"""
+    return ActivationCode.objects.create(
+        code=code,
+        plan=plan,
+        telegram_user_id=user_id,
+        payment_amount=PRICE_IN_STARS,
+        is_active=True
+    )
+
+
+@sync_to_async
+def check_activation_code(code):
+    """Проверка кода активации"""
+    try:
+        return ActivationCode.objects.get(
+            code=code,
+            is_active=True,
+            is_used=False
+        )
+    except ActivationCode.DoesNotExist:
+        return None
+
+
+# ════════════════════════════════════════════════════════════
+# КОМАНДЫ БОТА
+# ════════════════════════════════════════════════════════════
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
     user = update.effective_user
     
     # Сохраняем пользователя в базу для уведомлений
-    try:
-        telegram_user, created = TelegramUser.objects.update_or_create(
-            chat_id=user.id,
-            defaults={
-                'username': user.username,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-            }
-        )
-        
-        if created:
-            logger.info(f"✅ Новый пользователь зарегистрирован: @{user.username} (ID: {user.id})")
-    except Exception as e:
-        logger.error(f"❌ Ошибка сохранения пользователя: {e}")
+    created = await save_telegram_user(
+        user.id,
+        user.username,
+        user.first_name,
+        user.last_name
+    )
+    
+    if created:
+        logger.info(f"✅ Новый пользователь: @{user.username} (ID: {user.id})")
     
     keyboard = [
         [InlineKeyboardButton("💎 Купить Premium (100 ⭐)", callback_data='buy_premium')],
@@ -57,15 +124,32 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text(
+    welcome_text = (
         "🛡️ <b>AlertMe Bot</b>\n\n"
         "👋 Добро пожаловать!\n\n"
         "<b>Этот бот используется для:</b>\n"
         "• Покупки Premium подписки\n"
-        "• Получения экстренных уведомлений (если у ваших близких нет Twilio)\n\n"
-        "💡 Чтобы получать SOS уведомления, сообщите свой username близким:\n"
-        f"<code>@{user.username or 'ваш_username'}</code>\n\n"
-        "Выберите действие:",
+        "• Получения экстренных SOS уведомлений\n\n"
+    )
+    
+    if user.username:
+        welcome_text += (
+            "💡 <b>Как получать уведомления:</b>\n"
+            f"1. В приложении AlertMe зайдите в Профиль\n"
+            f"2. Введите ваш Telegram username: <code>@{user.username}</code>\n"
+            f"3. Добавьте близких в Emergency контакты с их Telegram username\n"
+            f"4. При SOS уведомления придут в Telegram!\n\n"
+        )
+    else:
+        welcome_text += (
+            "⚠️ У вас нет username в Telegram!\n"
+            "Установите его в настройках Telegram, чтобы получать уведомления.\n\n"
+        )
+    
+    welcome_text += "Выберите действие:"
+    
+    await update.message.reply_text(
+        welcome_text,
         parse_mode='HTML',
         reply_markup=reply_markup
     )
@@ -87,23 +171,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         context.user_data['waiting_for_code'] = True
     elif query.data == 'info':
-        user = query.from_user
-        await query.message.reply_text(
-            "ℹ️ <b>Информация</b>\n\n"
-            f"Ваш Telegram ID: <code>{user.id}</code>\n"
-            f"Username: @{user.username or 'не указан'}\n\n"
-            "<b>О Premium:</b>\n"
-            "💎 Стоимость: 100 Telegram Stars\n"
-            "⏰ Период: 30 дней\n\n"
-            "<b>Возможности:</b>\n"
-            "• Неограниченные контакты\n"
-            "• Геозоны\n"
-            "• История местоположений\n"
-            "• Приоритетная поддержка\n\n"
-            "<b>SOS Уведомления:</b>\n"
-            "Если у вас нет Twilio, уведомления будут приходить сюда!",
-            parse_mode='HTML'
-        )
+        await show_info(query)
     elif query.data == 'confirm_payment':
         await process_payment(query, context)
     elif query.data == 'back_to_menu':
@@ -111,7 +179,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def start_from_callback(query, context):
-    """Возврат в главное меню из callback"""
+    """Возврат в главное меню"""
+    user = query.from_user
     keyboard = [
         [InlineKeyboardButton("💎 Купить Premium (100 ⭐)", callback_data='buy_premium')],
         [InlineKeyboardButton("🔑 Активировать код", callback_data='activate_code')],
@@ -127,8 +196,41 @@ async def start_from_callback(query, context):
     )
 
 
+async def show_info(query):
+    """Информация о боте"""
+    user = query.from_user
+    
+    info_text = (
+        "ℹ️ <b>Информация</b>\n\n"
+        f"Ваш Telegram ID: <code>{user.id}</code>\n"
+    )
+    
+    if user.username:
+        info_text += f"Username: @{user.username}\n\n"
+    else:
+        info_text += "⚠️ Username: <i>не установлен</i>\n\n"
+    
+    info_text += (
+        "<b>О Premium:</b>\n"
+        "💎 Стоимость: 100 Telegram Stars\n"
+        "⏰ Период: 30 дней\n\n"
+        "<b>Возможности:</b>\n"
+        "• Неограниченные контакты\n"
+        "• Геозоны\n"
+        "• История местоположений\n"
+        "• Приоритетная поддержка\n\n"
+        "<b>SOS Уведомления:</b>\n"
+        "При активации SOS близкими, вы получите:\n"
+        "• 🚨 Уведомление с координатами\n"
+        "• 🗺️ Ссылку на карту\n"
+        "• ⏰ Время активации\n"
+    )
+    
+    await query.message.edit_text(info_text, parse_mode='HTML')
+
+
 async def show_payment(query, context):
-    """Показываем информацию об оплате"""
+    """Показ информации об оплате"""
     keyboard = [
         [InlineKeyboardButton("✅ Оплатить 100 ⭐", callback_data='confirm_payment')],
         [InlineKeyboardButton("« Назад", callback_data='back_to_menu')],
@@ -139,16 +241,21 @@ async def show_payment(query, context):
         "💳 <b>Оплата Premium подписки</b>\n\n"
         "Стоимость: <b>100 Telegram Stars</b> ⭐\n"
         "Срок: <b>30 дней</b>\n\n"
-        "После оплаты вы мгновенно получите код активации.\n"
-        "Введите этот код в приложении AlertMe.\n\n"
-        "⚠️ <i>Для MVP: Оплата симулируется, код выдается сразу</i>",
+        "<b>Что вы получите:</b>\n"
+        "✅ Неограниченные экстренные контакты\n"
+        "✅ Геозоны (безопасные/опасные зоны)\n"
+        "✅ История местоположений\n"
+        "✅ Приоритетная поддержка\n\n"
+        "После оплаты вы получите код активации.\n"
+        "Введите его в приложении AlertMe.\n\n"
+        "⚠️ <i>Для демо: код выдается сразу</i>",
         parse_mode='HTML',
         reply_markup=reply_markup
     )
 
 
 async def process_payment(query, context):
-    """Обработка оплаты"""
+    """Обработка оплаты и создание кода"""
     user_id = query.from_user.id
     
     try:
@@ -156,29 +263,10 @@ async def process_payment(query, context):
         code = generate_activation_code()
         
         # Получаем Premium план
-        try:
-            plan = SubscriptionPlan.objects.get(id=PREMIUM_PLAN_ID)
-        except SubscriptionPlan.DoesNotExist:
-            # Создаем план если его нет
-            plan = SubscriptionPlan.objects.create(
-                id=PREMIUM_PLAN_ID,
-                name='Premium',
-                plan_type='personal_premium',
-                description='Premium подписка',
-                price_monthly=100,
-                max_contacts=999,
-                geozones_enabled=True,
-                location_history_enabled=True
-            )
+        plan = await get_premium_plan()
         
         # Создаем код активации
-        activation_code = ActivationCode.objects.create(
-            code=code,
-            plan=plan,
-            telegram_user_id=user_id,
-            payment_amount=PRICE_IN_STARS,
-            is_active=True
-        )
+        await create_activation_code(code, plan, user_id)
         
         await query.message.edit_text(
             "✅ <b>Оплата успешна!</b>\n\n"
@@ -186,21 +274,22 @@ async def process_payment(query, context):
             f"<code>{code}</code>\n\n"
             "📱 <b>Как активировать:</b>\n"
             "1. Откройте приложение AlertMe\n"
-            "2. Перейдите в Настройки → Подписка\n"
+            "2. Перейдите в Профиль → Подписка\n"
             "3. Нажмите \"Активировать код\"\n"
             "4. Введите этот код\n\n"
-            "⏰ Код действителен 24 часа.",
+            "⏰ Код действителен 24 часа.\n\n"
+            "💡 Совет: Скопируйте код прямо сейчас!",
             parse_mode='HTML'
         )
         
-        logger.info(f"✅ Создан код активации {code} для пользователя {user_id}")
+        logger.info(f"✅ Код {code} создан для пользователя {user_id}")
         
     except Exception as e:
         logger.error(f"❌ Ошибка создания кода: {e}", exc_info=True)
         await query.message.edit_text(
             "❌ Произошла ошибка при создании кода.\n\n"
-            f"Детали ошибки: {str(e)}\n\n"
-            "Пожалуйста, попробуйте еще раз или обратитесь в поддержку.",
+            "Пожалуйста, попробуйте еще раз или обратитесь в поддержку:\n"
+            "@your_support_username",
             parse_mode='HTML'
         )
 
@@ -212,25 +301,21 @@ async def handle_code_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     code = update.message.text.strip().upper()
     
-    try:
-        activation = ActivationCode.objects.get(
-            code=code,
-            is_active=True,
-            is_used=False
-        )
-        
+    activation = await check_activation_code(code)
+    
+    if activation:
         await update.message.reply_text(
             f"✅ <b>Код действителен!</b>\n\n"
-            f"План: <b>{activation.plan.name}</b>\n"
+            f"План: <b>Premium</b>\n"
             f"Статус: <b>Готов к активации</b>\n\n"
-            f"Введите этот код в приложении для активации подписки.",
+            f"Введите код <code>{code}</code> в приложении AlertMe "
+            f"в разделе Профиль → Подписка.",
             parse_mode='HTML'
         )
-        
-    except ActivationCode.DoesNotExist:
+    else:
         await update.message.reply_text(
             "❌ Код не найден или уже использован.\n\n"
-            "Проверьте правильность ввода или купите новый.",
+            "Проверьте правильность ввода или купите новый код.",
             parse_mode='HTML'
         )
     
@@ -246,17 +331,20 @@ def generate_activation_code():
 def main():
     """Запуск бота"""
     if not BOT_TOKEN:
-        print("❌ TELEGRAM_BOT_TOKEN не установлен в переменных окружения!")
+        logger.error("❌ TELEGRAM_BOT_TOKEN не установлен!")
         return
     
     application = Application.builder().token(BOT_TOKEN).build()
     
+    # Регистрация обработчиков
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_code_input))
     
     logger.info("🤖 Бот запущен и готов к работе!")
-    logger.info("📱 Отправляет уведомления через Telegram (если Twilio не настроен)")
+    logger.info("📱 Готов отправлять SOS уведомления")
+    logger.info("💎 Готов продавать Premium подписки")
+    
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
