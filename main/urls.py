@@ -1,3 +1,4 @@
+# main/urls.py - ОБНОВЛЕННАЯ ВЕРСИЯ
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
@@ -13,7 +14,12 @@ from accounts.views import (
 from contacts.views import EmergencyContactViewSet, ContactGroupViewSet
 from sos.views import SOSAlertViewSet, ActivityTimerViewSet
 from geolocation.views import LocationHistoryViewSet, GeozoneViewSet, SharedLocationViewSet
-from subscriptions.views import SubscriptionPlanViewSet, UserSubscriptionViewSet, PaymentViewSet
+from subscriptions.views import (
+    SubscriptionPlanViewSet, 
+    UserSubscriptionViewSet, 
+    PaymentViewSet,
+    ActivationCodeViewSet  # НОВОЕ
+)
 
 router = DefaultRouter()
 
@@ -33,6 +39,7 @@ router.register(r'shared-locations', SharedLocationViewSet, basename='shared-loc
 router.register(r'subscription-plans', SubscriptionPlanViewSet, basename='subscription-plan')
 router.register(r'subscriptions', UserSubscriptionViewSet, basename='subscription')
 router.register(r'payments', PaymentViewSet, basename='payment')
+router.register(r'activation-codes', ActivationCodeViewSet, basename='activation-code')  # НОВОЕ
 
 urlpatterns = [
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
@@ -42,7 +49,7 @@ urlpatterns = [
     path('auth/register/', UserRegistrationView.as_view(), name='register'),
     path('auth/send-sms/', SendSMSVerificationView.as_view(), name='send-sms'),
     path('auth/verify-sms/', VerifySMSView.as_view(), name='verify-sms'),
-    path('auth/login/', CustomTokenObtainView.as_view(), name='login'),  # ИЗМЕНЕНО
+    path('auth/login/', CustomTokenObtainView.as_view(), name='login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
     path('', include(router.urls)),

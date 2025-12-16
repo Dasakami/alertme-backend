@@ -105,10 +105,11 @@ class GeozoneAdmin(admin.ModelAdmin):
     zone_type_badge.short_description = 'Тип зоны'
     
     def map_display(self, obj):
+        """Отображение ссылки на карту в админке"""
         if obj.latitude and obj.longitude:
             return format_html(
-                '<a href="https://go.2gis.com/show_point?lat={}&lon={}" target="_blank">'
-                'Открыть на карте</a>',
+                '<a href="https://www.google.com/maps/search/?api=1&query={},{}" target="_blank">'
+                'Открыть на Google Maps</a>',
                 obj.latitude, obj.longitude
             )
         return '-'

@@ -3,10 +3,10 @@ from django.contrib.auth import get_user_model
 from .models import SMSVerification, UserDevice
 from django.utils import timezone
 from datetime import timedelta
-import random
-from django.conf import settings
+
 
 User = get_user_model()
+
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):

@@ -8,6 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='your-secret-key-change-in-production')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.68.219,10.122.0.53').split(',')
+
 INSTALLED_APPS = [
     'daphne',
     'django.contrib.admin',
@@ -29,6 +30,7 @@ INSTALLED_APPS = [
     'contacts',
     'subscriptions',
     'geolocation',
+    'notifications',  
 ]
 
 MIDDLEWARE = [
@@ -64,23 +66,25 @@ TEMPLATES = [
 WSGI_APPLICATION = 'AlertMe.wsgi.application'
 ASGI_APPLICATION = 'AlertMe.asgi.application'
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': config('DB_NAME', default='safety_app'),
-#         'USER': config('DB_USER', default='postgres'),
-#         'PASSWORD': config('DB_PASSWORD', default='password'),
-#         'HOST': config('DB_HOST', default='localhost'),
-#         'PORT': config('DB_PORT', default='5432'),
-#     }
-# }
-
+# Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# Для продакшн используйте PostgreSQL:
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': config('DB_NAME', default='alertme'),
+#         'USER': config('DB_USER', default='postgres'),
+#         'PASSWORD': config('DB_PASSWORD', default='password'),
+#         'HOST': config('DB_HOST', default='localhost'),
+#         'PORT': config('DB_PORT', default='5432'),
+#     }
+# }
 
 CACHES = {
     'default': {
@@ -135,11 +139,11 @@ if USE_S3:
     AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 
-
 AUTHENTICATION_BACKENDS = [
-    'accounts.backends.PhoneNumberBackend',  # Наш кастомный backend
-    'django.contrib.auth.backends.ModelBackend',  # Стандартный (для админки)
+    'accounts.backends.PhoneNumberBackend',
+    'django.contrib.auth.backends.ModelBackend',
 ]
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -168,9 +172,10 @@ SIMPLE_JWT = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Safety App API',
+    'TITLE': 'AlertMe API',
     'DESCRIPTION': 'API для мобильного приложения безопасности',
     'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 CORS_ALLOWED_ORIGINS = config(
@@ -178,11 +183,34 @@ CORS_ALLOWED_ORIGINS = config(
     default='http://localhost:3000,http://localhost:8081,http://10.122.0.53:8000'
 ).split(',')
 
+# ═══════════════════════════════════════════════════════════════
+# TWILIO НАСТРОЙКИ (ПРОДАКШН)
+# ═══════════════════════════════════════════════════════════════
+# Получите на https://www.twilio.com/console
+TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')  # Формат: +1234567890
+
+# ═══════════════════════════════════════════════════════════════
+# TELEGRAM BOT (MVP/FALLBACK)
+# ═══════════════════════════════════════════════════════════════
+# Получите у @BotFather
+TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='7205482794:AAFstGWp1aOoLS_L_TNVX74aQzgwGDgKQy8')
+
+# ═══════════════════════════════════════════════════════════════
+# SMS API (ОПЦИОНАЛЬНО - старый метод)
+# ═══════════════════════════════════════════════════════════════
 SMS_API_KEY = config('SMS_API_KEY', default='')
 SMS_API_URL = config('SMS_API_URL', default='https://sms.kg/api/send')
 
+# ═══════════════════════════════════════════════════════════════
+# FIREBASE (ОПЦИОНАЛЬНО)
+# ═══════════════════════════════════════════════════════════════
 FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
 
+# ═══════════════════════════════════════════════════════════════
+# CELERY
+# ═══════════════════════════════════════════════════════════════
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
@@ -190,17 +218,54 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# ═══════════════════════════════════════════════════════════════
+# APP SETTINGS
+# ═══════════════════════════════════════════════════════════════
 SOS_VIDEO_DURATION = 3 
 SOS_ALERT_TIMEOUT = 15  
 MAX_FREE_CONTACTS = 1
 
 SUBSCRIPTION_PLANS = {
     'personal_premium': {
-        'price_monthly': 200,  # KGS
+        'price_monthly': 100,  # Telegram Stars
         'features': {
             'unlimited_contacts': True,
             'geozones': True,
             'location_history': True,
         }
     }
+}
+
+# Logging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose'
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'notifications': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }

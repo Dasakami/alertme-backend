@@ -1,6 +1,8 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from .models import SOSAlert, ActivityTimer, SOSNotification
 from contacts.serializers import EmergencyContactSerializer
+from decimal import Decimal
 
 
 class SOSNotificationSerializer(serializers.ModelSerializer):
@@ -27,16 +29,63 @@ class SOSAlertSerializer(serializers.ModelSerializer):
 
 
 class SOSAlertCreateSerializer(serializers.ModelSerializer):
+    latitude = serializers.DecimalField(
+        max_digits=12, 
+        decimal_places=8, 
+        required=True,
+        error_messages={
+            'required': 'Требуется координата широты',
+            'invalid': 'Неверный формат координаты',
+        }
+    )
+    longitude = serializers.DecimalField(
+        max_digits=12, 
+        decimal_places=8, 
+        required=True,
+        error_messages={
+            'required': 'Требуется координата долготы',
+            'invalid': 'Неверный формат координаты',
+        }
+    )
+    location_accuracy = serializers.FloatField(required=False, allow_null=True)
+    address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    
     class Meta:
         model = SOSAlert
         fields = ['latitude', 'longitude', 'location_accuracy', 'address',
                  'audio_file', 'video_file', 'activation_method', 'notes', 'device_info']
     
+    def validate_latitude(self, value):
+        if value is None:
+            raise serializers.ValidationError('Требуется координата широты')
+        
+        lat = float(value)
+        if not (-90 <= lat <= 90):
+            raise serializers.ValidationError('Широта должна быть между -90 и 90')
+        
+        return value
+    
+    def validate_longitude(self, value):
+        if value is None:
+            raise serializers.ValidationError('Требуется координата долготы')
+        
+        lon = float(value)
+        if not (-180 <= lon <= 180):
+            raise serializers.ValidationError('Долгота должна быть между -180 и 180')
+        
+        return value
+    
     def create(self, validated_data):
         if validated_data.get('latitude') and validated_data.get('longitude'):
             lat = validated_data['latitude']
             lng = validated_data['longitude']
-            validated_data['map_link'] = f"https://go.2gis.com/show_point?lat={lat}&lon={lng}"
+            validated_data['map_link'] = (
+                f"https://www.google.com/maps/search/?api=1&query={lat},{lng}"
+            )
+        
+        if 'notes' not in validated_data or validated_data['notes'] is None:
+            validated_data['notes'] = ''
         
         return super().create(validated_data)
 
@@ -55,7 +104,8 @@ class ActivityTimerSerializer(serializers.ModelSerializer):
                  'check_in_message', 'time_remaining', 'created_at']
         read_only_fields = ['id', 'start_time', 'end_time', 'created_at']
     
-    def get_time_remaining(self, obj):
+    @extend_schema_field(serializers.IntegerField)  # ИСПРАВЛЕНО
+    def get_time_remaining(self, obj) -> int:
         if obj.status == 'active':
             from django.utils import timezone
             remaining = (obj.end_time - timezone.now()).total_seconds()

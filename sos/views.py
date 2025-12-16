@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db import transaction
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from .models import SOSAlert, ActivityTimer, SOSNotification
 from .serializers import (SOSAlertSerializer, ActivityTimerSerializer, 
                          SOSAlertCreateSerializer, SOSStatusUpdateSerializer)
@@ -11,11 +12,18 @@ from .tasks import send_sos_notifications, process_sos_media
 from contacts.models import EmergencyContact
 
 
+@extend_schema_view(
+    list=extend_schema(description="Список SOS сигналов"),
+    create=extend_schema(description="Создать SOS сигнал"),
+)
 class SOSAlertViewSet(viewsets.ModelViewSet):
     serializer_class = SOSAlertSerializer
     permission_classes = [IsAuthenticated]
+    queryset = SOSAlert.objects.none()  # ИСПРАВЛЕНО
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):  # ИСПРАВЛЕНО
+            return SOSAlert.objects.none()
         return SOSAlert.objects.filter(user=self.request.user)
 
     def get_serializer_class(self):
@@ -30,10 +38,8 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Create SOS alert
         sos_alert = serializer.save(user=request.user)
         
-        # Get emergency contacts
         contacts = EmergencyContact.objects.filter(
             user=request.user,
             is_active=True
@@ -45,10 +51,8 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Trigger async notifications
         send_sos_notifications.delay(sos_alert.id, list(contacts.values_list('id', flat=True)))
         
-        # Process media files if provided
         if sos_alert.audio_file or sos_alert.video_file:
             process_sos_media.delay(sos_alert.id)
         
@@ -100,15 +104,20 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+@extend_schema_view(
+    list=extend_schema(description="Список таймеров"),
+)
 class ActivityTimerViewSet(viewsets.ModelViewSet):
     serializer_class = ActivityTimerSerializer
     permission_classes = [IsAuthenticated]
+    queryset = ActivityTimer.objects.none()  # ИСПРАВЛЕНО
 
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):  # ИСПРАВЛЕНО
+            return ActivityTimer.objects.none()
         return ActivityTimer.objects.filter(user=self.request.user)
 
     def create(self, request, *args, **kwargs):
-        # Cancel any active timers
         ActivityTimer.objects.filter(
             user=request.user,
             status='active'
@@ -145,3 +154,4 @@ class ActivityTimerViewSet(viewsets.ModelViewSet):
         if active_timer:
             return Response(self.get_serializer(active_timer).data)
         return Response({'detail': 'No active timer'}, status=status.HTTP_404_NOT_FOUND)
+

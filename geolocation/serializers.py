@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 from .models import LocationHistory, Geozone, GeozoneEvent, SharedLocation
 from contacts.serializers import EmergencyContactSerializer
 
@@ -31,7 +32,7 @@ class GeozoneSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         user = self.context['request'].user
         
-        if not self.instance:  
+        if not self.instance:
             try:
                 subscription = user.subscription
                 if not subscription.plan.geozones_enabled:
@@ -84,15 +85,17 @@ class SharedLocationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'share_token', 'start_time', 'end_time',
                            'created_at']
     
-    def get_share_url(self, obj):
+    @extend_schema_field(serializers.CharField)  # ИСПРАВЛЕНО
+    def get_share_url(self, obj) -> str:
         request = self.context.get('request')
         if request:
             return request.build_absolute_uri(
                 f'/api/shared-locations/track-by-token/?token={obj.share_token}'
             )
-        return None
+        return ''
     
-    def get_time_remaining(self, obj):
+    @extend_schema_field(serializers.IntegerField)  # ИСПРАВЛЕНО
+    def get_time_remaining(self, obj) -> int:
         if obj.status == 'active':
             from django.utils import timezone
             remaining = (obj.end_time - timezone.now()).total_seconds()

@@ -2,7 +2,8 @@
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
-
+from datetime import timedelta
+from django.utils import timezone
 
 class SubscriptionPlan(models.Model):
     PLAN_TYPE_CHOICES = [
@@ -124,3 +125,81 @@ class Feature(models.Model):
 
     def __str__(self):
         return self.name
+    
+
+class ActivationCode(models.Model):
+    """Коды активации из Telegram бота"""
+    code = models.CharField(max_length=20, unique=True, db_index=True)
+    plan = models.ForeignKey(SubscriptionPlan, on_delete=models.CASCADE)
+    
+    # Информация о платеже
+    telegram_user_id = models.BigIntegerField(null=True, blank=True)
+    payment_amount = models.IntegerField(help_text='Сумма в Telegram Stars')
+    
+    # Статусы
+    is_active = models.BooleanField(default=True)
+    is_used = models.BooleanField(default=False)
+    
+    # Кто активировал
+    activated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True,
+        related_name='activated_codes'
+    )
+    activated_at = models.DateTimeField(null=True, blank=True)
+    
+    # Временные метки
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    
+    class Meta:
+        verbose_name = _('Activation Code')
+        verbose_name_plural = _('Activation Codes')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.code} - {self.plan.name}"
+    
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            # Код действителен 24 часа
+            self.expires_at = timezone.now() + timedelta(hours=24)
+        super().save(*args, **kwargs)
+    
+    def is_valid(self):
+        """Проверка валидности кода"""
+        return (
+            self.is_active and 
+            not self.is_used and 
+            timezone.now() < self.expires_at
+        )
+    
+    def activate_for_user(self, user):
+        """Активация кода для пользователя"""
+        if not self.is_valid():
+            raise ValueError('Код недействителен')
+        
+        from datetime import timedelta
+        
+        # Создаем или обновляем подписку
+        subscription, created = UserSubscription.objects.update_or_create(
+            user=user,
+            defaults={
+                'plan': self.plan,
+                'status': 'active',
+                'payment_period': 'monthly',
+                'start_date': timezone.now(),
+                'end_date': timezone.now() + timedelta(days=30),
+                'auto_renew': False,
+            }
+        )
+        
+        # Отмечаем код как использованный
+        self.is_used = True
+        self.activated_by = user
+        self.activated_at = timezone.now()
+        self.save()
+        
+        return subscription

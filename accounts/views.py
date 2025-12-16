@@ -14,7 +14,6 @@ from .tasks import send_verification_sms
 
 User = get_user_model()
 
-
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
     permission_classes = [AllowAny]
@@ -92,19 +91,32 @@ class VerifySMSView(generics.CreateAPIView):
             })
 
 
-# ═══════════════════════════════════════════════════════════════
-# КАСТОМНЫЙ LOGIN - авторизация по phone_number
-# ═══════════════════════════════════════════════════════════════
+
+
+from drf_spectacular.utils import extend_schema, OpenApiExample
+from rest_framework import serializers
+
+class LoginSerializer(serializers.Serializer):  # НОВОЕ
+    phone_number = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+
+
+@extend_schema(
+    request=LoginSerializer,
+    responses={200: UserSerializer},
+    examples=[
+        OpenApiExample(
+            'Login Example',
+            value={
+                'phone_number': '+996555123456',
+                'password': 'password123'
+            }
+        )
+    ]
+)
 class CustomTokenObtainView(APIView):
-    """
-    Кастомная авторизация по номеру телефона
-    POST /api/auth/login/
-    {
-        "phone_number": "+996705352515",
-        "password": "password123"
-    }
-    """
     permission_classes = [AllowAny]
+    serializer_class = LoginSerializer  # ДОБАВЛЕНО
     
     def post(self, request):
         phone_number = request.data.get('phone_number')
@@ -116,7 +128,6 @@ class CustomTokenObtainView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Используем наш кастомный backend
         user = authenticate(request, phone_number=phone_number, password=password)
         
         if user is None:
@@ -131,7 +142,6 @@ class CustomTokenObtainView(APIView):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        # Генерируем JWT токены
         refresh = RefreshToken.for_user(user)
         
         return Response({

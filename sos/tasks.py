@@ -215,12 +215,16 @@ def _generate_sms_content(sos_alert, contact):
     message += f"{user.phone_number} активировал SOS!\n"
     
     if sos_alert.latitude and sos_alert.longitude:
-        message += f"\n📍 Локация: {sos_alert.map_link or 'Координаты недоступны'}\n"
+        # ИЗМЕНЕНО: Google Maps ссылка
+        google_maps_url = (
+            f"https://www.google.com/maps/search/?api=1"
+            f"&query={sos_alert.latitude},{sos_alert.longitude}"
+        )
+        message += f"\n📍 Локация: {google_maps_url}\n"
     
     message += f"\nВремя: {sos_alert.created_at.strftime('%H:%M, %d.%m.%Y')}"
     
     return message
-
 
 def _generate_push_content(sos_alert, contact):
     """Generate push notification content"""

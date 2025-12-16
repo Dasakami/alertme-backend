@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import SubscriptionPlan, UserSubscription, PaymentTransaction
+from .models import SubscriptionPlan, UserSubscription, PaymentTransaction,ActivationCode
 
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
@@ -61,3 +61,11 @@ class SubscribeSerializer(serializers.Serializer):
     def validate(self, attrs):
         attrs['plan'] = attrs.pop('plan_id')
         return attrs
+    
+class ActivationCodeSerializer(serializers.ModelSerializer):
+    plan_name = serializers.CharField(source='plan.name', read_only=True)
+    
+    class Meta:
+        model = ActivationCode
+        fields = ['code', 'plan_name', 'is_used', 'expires_at', 'created_at']
+        read_only_fields = fields

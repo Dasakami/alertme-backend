@@ -15,7 +15,13 @@ class EmergencyContact(models.Model):
     notification_preferences = models.JSONField(default=dict, blank=True)  
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    telegram_username = models.CharField(
+        max_length=255, 
+        null=True, 
+        blank=True,
+        verbose_name='Telegram Username',
+        help_text='Username контакта в Telegram (без @) для уведомлений'
+    )
     class Meta:
         verbose_name = _('Emergency Contact')
         verbose_name_plural = _('Emergency Contacts')
