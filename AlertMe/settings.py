@@ -81,15 +81,17 @@ DATABASES = {
 #         'NAME': config('DB_NAME', default='alertme'),
 #         'USER': config('DB_USER', default='postgres'),
 #         'PASSWORD': config('DB_PASSWORD', default='password'),
-#         'HOST': config('DB_HOST', default='localhost'),
+#         'HOST': config('DB_HOST', default='127.0.0.1'),
 #         'PORT': config('DB_PORT', default='5432'),
 #     }
 # }
 
+REDIS_BASE_URL = config('REDIS_URL', default='redis://127.0.0.1:6379')
+
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': config('REDIS_URL', default='redis://localhost:6379/1'),
+        'LOCATION': f'{REDIS_BASE_URL}/1',
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
         }
@@ -100,10 +102,14 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            'hosts': [config('REDIS_URL', default='redis://localhost:6379/2')],
+            'hosts': [f'{REDIS_BASE_URL}/2'],
         },
     },
 }
+
+CELERY_BROKER_URL = f'{REDIS_BASE_URL}/0'
+CELERY_RESULT_BACKEND = f'{REDIS_BASE_URL}/0'
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -180,7 +186,7 @@ SPECTACULAR_SETTINGS = {
 
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000,http://localhost:8081,http://10.122.0.53:8000'
+    default='http://127.0.0.1:3000,http://127.0.0.1:8081,http://10.122.0.53:8000'
 ).split(',')
 
 # ═══════════════════════════════════════════════════════════════
@@ -208,19 +214,6 @@ SMS_API_URL = config('SMS_API_URL', default='https://sms.kg/api/send')
 # ═══════════════════════════════════════════════════════════════
 FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
 
-# ═══════════════════════════════════════════════════════════════
-# CELERY
-# ═══════════════════════════════════════════════════════════════
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-
-# ═══════════════════════════════════════════════════════════════
-# APP SETTINGS
-# ═══════════════════════════════════════════════════════════════
 SOS_VIDEO_DURATION = 3 
 SOS_ALERT_TIMEOUT = 15  
 MAX_FREE_CONTACTS = 1

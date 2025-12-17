@@ -1,3 +1,4 @@
+# subscriptions/views.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -47,11 +48,26 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['get'])
     def current(self, request):
+        """ИСПРАВЛЕНО: правильная проверка подписки"""
         try:
             subscription = UserSubscription.objects.get(user=request.user)
-            serializer = self.get_serializer(subscription)
-            return Response(serializer.data)
+            
+            # Проверяем что подписка активна
+            if subscription.status == 'active' and subscription.end_date > timezone.now():
+                serializer = self.get_serializer(subscription)
+                return Response(serializer.data)
+            else:
+                # Подписка истекла - обновляем статус
+                subscription.status = 'expired'
+                subscription.save()
+                
+                return Response({
+                    'detail': 'Subscription expired',
+                    'plan': 'free'
+                })
+                
         except UserSubscription.DoesNotExist:
+            # Нет подписки - значит Free план
             return Response({
                 'detail': 'No active subscription',
                 'plan': 'free'
@@ -178,10 +194,11 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
 class ActivationCodeViewSet(viewsets.ViewSet):
     """ViewSet для активации кодов из Telegram"""
     permission_classes = [IsAuthenticated]
-    serializer_class = ActivationCodeSerializer  # ДОБАВЛЕНО для Swagger
+    serializer_class = ActivationCodeSerializer
     
     @action(detail=False, methods=['post'])
     def activate(self, request):
+        """ИСПРАВЛЕНО: правильное обновление подписки"""
         code_str = request.data.get('code', '').strip().upper()
         
         if not code_str:
@@ -193,6 +210,7 @@ class ActivationCodeViewSet(viewsets.ViewSet):
         try:
             activation_code = ActivationCode.objects.get(code=code_str)
             
+            # Проверка валидности
             if not activation_code.is_valid():
                 if activation_code.is_used:
                     return Response(
@@ -210,7 +228,15 @@ class ActivationCodeViewSet(viewsets.ViewSet):
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
+            # Активируем код
             subscription = activation_code.activate_for_user(request.user)
+            
+            # ✅ ВАЖНО: Обновляем данные подписки в ответе
+            subscription.refresh_from_db()
+            
+            print(f"✅ Код {code_str} активирован для пользователя {request.user.phone_number}")
+            print(f"✅ Подписка: {subscription.plan.name}, статус: {subscription.status}")
+            print(f"✅ Действительна до: {subscription.end_date}")
             
             return Response({
                 'success': True,
@@ -229,6 +255,8 @@ class ActivationCodeViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return Response(
                 {'error': f'Ошибка активации: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -259,5 +287,3 @@ class ActivationCodeViewSet(viewsets.ViewSet):
                 {'valid': False, 'error': 'Код не найден'},
                 status=status.HTTP_404_NOT_FOUND
             )
-
-

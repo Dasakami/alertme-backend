@@ -19,8 +19,6 @@ class EmergencyContactViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def set_primary(self, request, pk=None):
         contact = self.get_object()
-        
-        # Remove primary from all other contacts
         EmergencyContact.objects.filter(
             user=request.user,
             is_primary=True
@@ -50,7 +48,6 @@ class EmergencyContactViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     def import_from_phone(self, request):
-        """Import contacts from phone contact list"""
         contacts_data = request.data.get('contacts', [])
         
         created_contacts = []
