@@ -86,7 +86,8 @@ DATABASES = {
 #     }
 # }
 
-REDIS_BASE_URL = config('REDIS_URL', default='redis://127.0.0.1:6379')
+# Redis URL из Docker Desktop (localhost:6379)
+REDIS_BASE_URL = config('REDIS_URL', default='redis://localhost:6379')
 
 CACHES = {
     'default': {
@@ -94,6 +95,8 @@ CACHES = {
         'LOCATION': f'{REDIS_BASE_URL}/1',
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'SOCKET_CONNECT_TIMEOUT': 5,
+            'SOCKET_TIMEOUT': 5,
         }
     }
 }
@@ -102,13 +105,22 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            'hosts': [f'{REDIS_BASE_URL}/2'],
+            'hosts': [(config('REDIS_HOST', default='localhost'), 6379)],
         },
     },
 }
 
+# Celery настройки
 CELERY_BROKER_URL = f'{REDIS_BASE_URL}/0'
 CELERY_RESULT_BACKEND = f'{REDIS_BASE_URL}/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60
+
+# Если Redis недоступен - используем синхронное выполнение
+CELERY_TASK_ALWAYS_EAGER = config('CELERY_ALWAYS_EAGER', default=False, cast=bool)
 
 
 AUTH_PASSWORD_VALIDATORS = [

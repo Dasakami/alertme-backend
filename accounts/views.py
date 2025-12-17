@@ -152,7 +152,6 @@ class CustomTokenObtainView(APIView):
             }
         })
 
-
 class UserProfileViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
@@ -167,6 +166,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['put', 'patch'])
     def update_profile(self, request):
+        """Обновление профиля пользователя"""
         serializer = self.get_serializer(
             request.user,
             data=request.data,
@@ -175,29 +175,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
-    def update_fcm_token(self, request):
-        fcm_token = request.data.get('fcm_token')
-        if not fcm_token:
-            return Response(
-                {'error': 'FCM token required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        request.user.fcm_token = fcm_token
-        request.user.save()
-        
-        return Response({'detail': 'FCM token updated'})
-
-    @action(detail=False, methods=['delete'])
-    def delete_account(self, request):
-        """Delete user account"""
-        user = request.user
-        user.is_active = False
-        user.save()
-        
-        return Response({'detail': 'Account deactivated'})
 
 
 class UserDeviceViewSet(viewsets.ModelViewSet):
@@ -213,3 +190,4 @@ class UserDeviceViewSet(viewsets.ModelViewSet):
         device.is_active = False
         device.save()
         return Response({'detail': 'Device deactivated'})
+    

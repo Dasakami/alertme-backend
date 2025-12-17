@@ -11,6 +11,10 @@ from .serializers import (SOSAlertSerializer, ActivityTimerSerializer,
 from .tasks import send_sos_notifications, process_sos_media
 from contacts.models import EmergencyContact
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @extend_schema_view(
     list=extend_schema(description="Список SOS сигналов"),
@@ -51,10 +55,24 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        send_sos_notifications.delay(sos_alert.id, list(contacts.values_list('id', flat=True)))
+        contact_ids = list(contacts.values_list('id', flat=True))
         
+        # Пытаемся отправить асинхронно
+        try:
+            send_sos_notifications.delay(sos_alert.id, contact_ids)
+            logger.info("✅ Уведомления запланированы (async)")
+        except Exception as e:
+            # Fallback: синхронная отправка
+            logger.warning(f"⚠️ Celery недоступен, синхронная отправка: {e}")
+            from .tasks import send_sos_notifications_sync
+            send_sos_notifications_sync(sos_alert.id, contact_ids)
+        
+        # Обработка медиа
         if sos_alert.audio_file or sos_alert.video_file:
-            process_sos_media.delay(sos_alert.id)
+            try:
+                process_sos_media.delay(sos_alert.id)
+            except Exception:
+                logger.warning("⚠️ Медиа обработка пропущена")
         
         headers = self.get_success_headers(serializer.data)
         return Response(

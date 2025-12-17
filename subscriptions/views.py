@@ -1,4 +1,4 @@
-# subscriptions/views.py - ИСПРАВЛЕННАЯ ВЕРСИЯ
+# subscriptions/views.py - ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -6,6 +6,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.utils import timezone
 from datetime import timedelta
 from drf_spectacular.utils import extend_schema, extend_schema_view
+import uuid
+import logging
+
 from .models import (
     SubscriptionPlan, 
     UserSubscription, 
@@ -19,7 +22,8 @@ from .serializers import (
     SubscribeSerializer,
     ActivationCodeSerializer
 )
-import uuid
+
+logger = logging.getLogger(__name__)
 
 
 class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
@@ -43,35 +47,55 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
         return UserSubscription.objects.filter(user=self.request.user)
 
     @extend_schema(
-        description="Получить текущую подписку",
+        description="Получить текущую подписку с проверкой срока",
         responses={200: UserSubscriptionSerializer}
     )
     @action(detail=False, methods=['get'])
     def current(self, request):
-        """ИСПРАВЛЕНО: правильная проверка подписки"""
+        """Один запрос для получения статуса подписки"""
         try:
-            subscription = UserSubscription.objects.get(user=request.user)
+            subscription = UserSubscription.objects.select_related('plan').get(
+                user=request.user
+            )
             
-            # Проверяем что подписка активна
-            if subscription.status == 'active' and subscription.end_date > timezone.now():
-                serializer = self.get_serializer(subscription)
-                return Response(serializer.data)
-            else:
-                # Подписка истекла - обновляем статус
+            # Проверяем статус и обновляем если нужно
+            now = timezone.now()
+            
+            if subscription.status == 'active' and subscription.end_date <= now:
                 subscription.status = 'expired'
-                subscription.save()
-                
-                return Response({
-                    'detail': 'Subscription expired',
-                    'plan': 'free'
-                })
+                subscription.save(update_fields=['status'])
+                logger.info(f"✅ Подписка истекла для {request.user.phone_number}")
+            
+            # Возвращаем единую структуру
+            return Response({
+                'id': subscription.id,
+                'plan': SubscriptionPlanSerializer(subscription.plan).data,
+                'status': subscription.status,
+                'is_premium': subscription.status == 'active' and subscription.plan.plan_type != 'free',
+                'days_remaining': max(0, (subscription.end_date - now).days) if subscription.status == 'active' else 0,
+                'end_date': subscription.end_date.isoformat(),
+                'payment_period': subscription.payment_period,
+                'auto_renew': subscription.auto_renew,
+            })
                 
         except UserSubscription.DoesNotExist:
-            # Нет подписки - значит Free план
+            # Нет подписки = Free план
             return Response({
-                'detail': 'No active subscription',
-                'plan': 'free'
+                'id': None,
+                'plan': {'plan_type': 'free', 'name': 'Free'},
+                'status': 'free',
+                'is_premium': False,
+                'days_remaining': 0,
+                'end_date': None,
+                'payment_period': None,
+                'auto_renew': False,
             })
+        except Exception as e:
+            logger.error(f"❌ Ошибка проверки подписки: {e}", exc_info=True)
+            return Response(
+                {'error': 'Ошибка проверки подписки'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @extend_schema(
         description="Оформить подписку",
@@ -129,7 +153,7 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
     def cancel(self, request, pk=None):
         subscription = self.get_object()
         subscription.auto_renew = False
-        subscription.save()
+        subscription.save(update_fields=['auto_renew'])
         
         return Response({
             'detail': 'Subscription will not renew after current period',
@@ -166,11 +190,11 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
         
         payment.status = 'completed'
         payment.completed_at = timezone.now()
-        payment.save()
+        payment.save(update_fields=['status', 'completed_at'])
         
         subscription = payment.subscription
         subscription.status = 'active'
-        subscription.save()
+        subscription.save(update_fields=['status'])
         
         return Response({
             'detail': 'Payment successful',
@@ -198,72 +222,76 @@ class ActivationCodeViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['post'])
     def activate(self, request):
-        """ИСПРАВЛЕНО: правильное обновление подписки"""
+        """Активация кода с созданием/обновлением подписки"""
         code_str = request.data.get('code', '').strip().upper()
         
         if not code_str:
             return Response(
-                {'error': 'Введите код активации'},
+                {'success': False, 'error': 'Введите код активации'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
-            activation_code = ActivationCode.objects.get(code=code_str)
+            activation_code = ActivationCode.objects.select_related('plan').get(code=code_str)
             
             # Проверка валидности
             if not activation_code.is_valid():
                 if activation_code.is_used:
-                    return Response(
-                        {'error': 'Код уже использован'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    error = 'Код уже использован'
                 elif timezone.now() >= activation_code.expires_at:
-                    return Response(
-                        {'error': 'Код истек'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    error = 'Код истек'
                 else:
-                    return Response(
-                        {'error': 'Код недействителен'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    error = 'Код недействителен'
+                    
+                return Response(
+                    {'success': False, 'error': error},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
             # Активируем код
-            subscription = activation_code.activate_for_user(request.user)
-            
-            # ✅ ВАЖНО: Обновляем данные подписки в ответе
-            subscription.refresh_from_db()
-            
-            print(f"✅ Код {code_str} активирован для пользователя {request.user.phone_number}")
-            print(f"✅ Подписка: {subscription.plan.name}, статус: {subscription.status}")
-            print(f"✅ Действительна до: {subscription.end_date}")
-            
-            return Response({
-                'success': True,
-                'message': f'Premium подписка активирована до {subscription.end_date.strftime("%d.%m.%Y")}',
-                'subscription': UserSubscriptionSerializer(subscription).data
-            }, status=status.HTTP_200_OK)
+            try:
+                subscription = activation_code.activate_for_user(request.user)
+                subscription.refresh_from_db()
+                
+                logger.info(
+                    f"✅ Код {code_str} активирован для {request.user.phone_number}. "
+                    f"Подписка до {subscription.end_date}"
+                )
+                
+                return Response({
+                    'success': True,
+                    'message': f'Premium подписка активирована до {subscription.end_date.strftime("%d.%m.%Y")}',
+                    'subscription': {
+                        'id': subscription.id,
+                        'plan': subscription.plan.name,
+                        'status': subscription.status,
+                        'is_premium': True,
+                        'days_remaining': (subscription.end_date - timezone.now()).days,
+                        'end_date': subscription.end_date.isoformat(),
+                    }
+                }, status=status.HTTP_200_OK)
+                
+            except ValueError as e:
+                return Response(
+                    {'success': False, 'error': str(e)},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
         except ActivationCode.DoesNotExist:
             return Response(
-                {'error': 'Код не найден. Проверьте правильность ввода.'},
+                {'success': False, 'error': 'Код не найден. Проверьте правильность ввода.'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        except ValueError as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
         except Exception as e:
-            import traceback
-            traceback.print_exc()
+            logger.error(f"❌ Ошибка активации кода: {e}", exc_info=True)
             return Response(
-                {'error': f'Ошибка активации: {str(e)}'},
+                {'success': False, 'error': f'Ошибка активации: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
     @action(detail=False, methods=['post'])
     def check(self, request):
+        """Проверка кода без активации"""
         code_str = request.data.get('code', '').strip().upper()
         
         if not code_str:
@@ -273,13 +301,13 @@ class ActivationCodeViewSet(viewsets.ViewSet):
             )
         
         try:
-            activation_code = ActivationCode.objects.get(code=code_str)
+            activation_code = ActivationCode.objects.select_related('plan').get(code=code_str)
             
             return Response({
                 'valid': activation_code.is_valid(),
                 'plan': activation_code.plan.name,
                 'is_used': activation_code.is_used,
-                'expires_at': activation_code.expires_at,
+                'expires_at': activation_code.expires_at.isoformat(),
             })
             
         except ActivationCode.DoesNotExist:

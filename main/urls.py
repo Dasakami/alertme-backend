@@ -1,4 +1,3 @@
-# main/urls.py - ОБНОВЛЕННАЯ ВЕРСИЯ
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
@@ -18,7 +17,7 @@ from subscriptions.views import (
     SubscriptionPlanViewSet, 
     UserSubscriptionViewSet, 
     PaymentViewSet,
-    ActivationCodeViewSet  # НОВОЕ
+    ActivationCodeViewSet  
 )
 
 router = DefaultRouter()
@@ -39,7 +38,7 @@ router.register(r'shared-locations', SharedLocationViewSet, basename='shared-loc
 router.register(r'subscription-plans', SubscriptionPlanViewSet, basename='subscription-plan')
 router.register(r'subscriptions', UserSubscriptionViewSet, basename='subscription')
 router.register(r'payments', PaymentViewSet, basename='payment')
-router.register(r'activation-codes', ActivationCodeViewSet, basename='activation-code')  # НОВОЕ
+router.register(r'activation-codes', ActivationCodeViewSet, basename='activation-code')  
 
 urlpatterns = [
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
