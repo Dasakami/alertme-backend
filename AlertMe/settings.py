@@ -217,9 +217,9 @@ CORS_ALLOWED_ORIGINS = config(
 # TWILIO НАСТРОЙКИ (ПРОДАКШН)
 # ═══════════════════════════════════════════════════════════════
 # Получите на https://www.twilio.com/console
-TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='ACa29622ff707f10d0e715c35b96228ed2')
-TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='3a556838d20a25eccb357103d8dac6f1')
-TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='+14633630522')  # Формат: +1234567890
+TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
+TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')  # Формат: +1234567890
 
 # ═══════════════════════════════════════════════════════════════
 # TELEGRAM BOT (MVP/FALLBACK)
