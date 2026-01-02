@@ -87,40 +87,52 @@ DATABASES = {
 # }
 
 # Redis URL из Docker Desktop (localhost:6379)
-REDIS_BASE_URL = config('REDIS_URL', default='redis://localhost:6379')
+# DISABLED FOR MVP - using synchronous task execution instead
+# REDIS_BASE_URL = config('REDIS_URL', default='redis://localhost:6379')
 
+# DISABLED - Using synchronous execution instead
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_redis.cache.RedisCache',
+#         'LOCATION': f'{REDIS_BASE_URL}/1',
+#         'OPTIONS': {
+#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+#             'SOCKET_CONNECT_TIMEOUT': 5,
+#             'SOCKET_TIMEOUT': 5,
+#         }
+#     }
+# }
+
+# Use simple in-memory cache for MVP
 CACHES = {
     'default': {
-        'BACKEND': 'django_redis.cache.RedisCache',
-        'LOCATION': f'{REDIS_BASE_URL}/1',
-        'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'SOCKET_CONNECT_TIMEOUT': 5,
-            'SOCKET_TIMEOUT': 5,
-        }
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
     }
 }
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [(config('REDIS_HOST', default='localhost'), 6379)],
-        },
-    },
-}
+# DISABLED - Not using WebSockets for MVP
+# CHANNEL_LAYERS = {
+#     'default': {
+#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
+#         'CONFIG': {
+#             'hosts': [(config('REDIS_HOST', default='localhost'), 6379)],
+#         },
+#     },
+# }
 
-# Celery настройки
-CELERY_BROKER_URL = f'{REDIS_BASE_URL}/0'
-CELERY_RESULT_BACKEND = f'{REDIS_BASE_URL}/0'
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60
+# Celery настройки DISABLED FOR MVP
+# All tasks are now synchronous, no broker needed
+# CELERY_BROKER_URL = f'{REDIS_BASE_URL}/0'
+# CELERY_RESULT_BACKEND = f'{REDIS_BASE_URL}/0'
+# CELERY_ACCEPT_CONTENT = ['json']
+# CELERY_TASK_SERIALIZER = 'json'
+# CELERY_RESULT_SERIALIZER = 'json'
+# CELERY_TASK_TRACK_STARTED = True
+# CELERY_TASK_TIME_LIMIT = 30 * 60
 
-# Если Redis недоступен - используем синхронное выполнение
-CELERY_TASK_ALWAYS_EAGER = config('CELERY_ALWAYS_EAGER', default=False, cast=bool)
+# Force synchronous task execution (no broker connection needed)
+CELERY_TASK_ALWAYS_EAGER = True
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -205,9 +217,9 @@ CORS_ALLOWED_ORIGINS = config(
 # TWILIO НАСТРОЙКИ (ПРОДАКШН)
 # ═══════════════════════════════════════════════════════════════
 # Получите на https://www.twilio.com/console
-TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
-TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
-TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')  # Формат: +1234567890
+TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='ACa29622ff707f10d0e715c35b96228ed2')
+TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='3a556838d20a25eccb357103d8dac6f1')
+TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='+14633630522')  # Формат: +1234567890
 
 # ═══════════════════════════════════════════════════════════════
 # TELEGRAM BOT (MVP/FALLBACK)
@@ -221,6 +233,8 @@ TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='7205482794:AAFstGWp1a
 SMS_API_KEY = config('SMS_API_KEY', default='')
 SMS_API_URL = config('SMS_API_URL', default='https://sms.kg/api/send')
 
+# Базовый URL сервиса (используется для ссылок в SMS)
+SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000')
 # ═══════════════════════════════════════════════════════════════
 # FIREBASE (ОПЦИОНАЛЬНО)
 # ═══════════════════════════════════════════════════════════════

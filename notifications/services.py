@@ -243,3 +243,46 @@ class NotificationService:
         message += "❗ Это автоматическое сообщение из приложения AlertMe"
         
         return message
+    
+    def send_audio_to_telegram(
+        self,
+        telegram_username: str,
+        audio_path: str,
+        caption: Optional[str] = None
+    ) -> bool:
+        """Отправка аудио в Telegram"""
+        try:
+            # Получаем chat_id по username
+            chat_id = self._get_chat_id_by_username(telegram_username)
+            
+            if not chat_id:
+                logger.warning(
+                    f"Пользователь @{telegram_username} не найден. "
+                    f"Попросите его написать /start боту."
+                )
+                return False
+            
+            # Отправляем аудио
+            import requests
+            
+            url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendAudio"
+            
+            with open(audio_path, 'rb') as audio_file:
+                files = {'audio': audio_file}
+                data = {'chat_id': chat_id}
+                
+                if caption:
+                    data['caption'] = caption
+                
+                response = requests.post(url, files=files, data=data, timeout=30)
+                
+                if response.status_code == 200:
+                    logger.info(f"✅ Аудио отправлено @{telegram_username} (chat_id: {chat_id})")
+                    return True
+                else:
+                    logger.error(f"❌ Ошибка Telegram API: {response.text}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки аудио: {e}", exc_info=True)
+            return False

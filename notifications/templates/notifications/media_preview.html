@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Media for SOS {{ sos.id }}</title>
+</head>
+<body>
+  <h1>Медиа для SOS-оповещения #{{ sos.id }}</h1>
+  <p>Пользователь: {{ sos.user }}</p>
+  <p>Статус: {{ sos.status }}</p>
+
+  {% if audio_url %}
+    <h2>Аудио</h2>
+    <audio controls style="width:100%">
+      <source src="{{ audio_url }}" />
+      Тег audio не поддерживается вашим браузером.
+    </audio>
+    <p><a href="{{ audio_url }}" download>Скачать аудио</a></p>
+  {% endif %}
+
+  {% if video_url %}
+    <h2>Видео</h2>
+    <video controls style="max-width:100%">
+      <source src="{{ video_url }}" />
+      Тег video не поддерживается вашим браузером.
+    </video>
+    <p><a href="{{ video_url }}" download>Скачать видео</a></p>
+  {% endif %}
+
+  {% if not audio_url and not video_url %}
+    <p>Медиа не загружено.</p>
+  {% endif %}
+</body>
+</html>

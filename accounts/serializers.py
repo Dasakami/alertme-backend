@@ -151,13 +151,14 @@ class UserSerializer(serializers.ModelSerializer):
             'email', 
             'first_name', 
             'last_name', 
-            'telegram_username',  # НОВОЕ ПОЛЕ
+            'telegram_username',
             'avatar', 
             'language', 
-            'is_phone_verified', 
+            'is_phone_verified',
+            'is_premium',
             'created_at'
         ]
-        read_only_fields = ['id', 'phone_number', 'is_phone_verified', 'created_at']
+        read_only_fields = ['id', 'phone_number', 'is_phone_verified', 'is_premium', 'created_at']
     
     def validate_telegram_username(self, value):
         """Валидация Telegram username"""

@@ -27,7 +27,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "7205482794:AAFstGWp1aOoLS_L_TNVX74aQzgwGDgKQy8"
+BOT_TOKEN = "8423156547:AAGZC3tBsLbAzLYGVt2_rzDd8nJhAPsNP48"
 PREMIUM_PLAN_ID = 2
 PRICE_IN_STARS = 100
 
@@ -101,21 +101,21 @@ def check_activation_code(code):
 # ════════════════════════════════════════════════════════════
 # КОМАНДЫ БОТА
 # ════════════════════════════════════════════════════════════
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
     user = update.effective_user
+    chat_id = update.effective_chat.id  # ВАЖНО: получаем chat_id
     
     # Сохраняем пользователя в базу для уведомлений
     created = await save_telegram_user(
-        user.id,
+        chat_id,  # Передаем chat_id
         user.username,
         user.first_name,
         user.last_name
     )
     
     if created:
-        logger.info(f"✅ Новый пользователь: @{user.username} (ID: {user.id})")
+        logger.info(f"✅ Новый пользователь: @{user.username} (ID: {user.id}, Chat: {chat_id})")
     
     keyboard = [
         [InlineKeyboardButton("💎 Купить Premium (100 ⭐)", callback_data='buy_premium')],
@@ -138,7 +138,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"1. В приложении AlertMe зайдите в Профиль\n"
             f"2. Введите ваш Telegram username: <code>@{user.username}</code>\n"
             f"3. Добавьте близких в Emergency контакты с их Telegram username\n"
-            f"4. При SOS уведомления придут в Telegram!\n\n"
+            f"4. При SOS уведомления (+ аудио) придут в Telegram!\n\n"
+            f"🔑 Ваш Chat ID: <code>{chat_id}</code>\n\n"
         )
     else:
         welcome_text += (

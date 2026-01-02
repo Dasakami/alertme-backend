@@ -1,57 +1,52 @@
-from celery import shared_task
 from django.conf import settings
-import requests
+from django.utils import timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-@shared_task
 def send_verification_sms(sms_verification_id):
-    """Send SMS verification code"""
+    """Отправка SMS кода подтверждения через Twilio (синхронная)"""
     from .models import SMSVerification
+    from notifications.sms_service import SMSService
     
     try:
         sms_verification = SMSVerification.objects.get(id=sms_verification_id)
-        
         phone = str(sms_verification.phone_number)
         code = sms_verification.code
         
-        # ═══════════════════════════════════════════════════════════
-        # ПОКА ПРОСТО ВЫВОДИМ В КОНСОЛЬ
-        # ═══════════════════════════════════════════════════════════
-        print(f"")
-        print(f"═════════════════════════════════════════════")
-        print(f"📱 SMS КОД ДЛЯ: {phone}")
-        print(f"🔐 КОД: {code}")
-        print(f"⏰ Действителен 10 минут")
-        print(f"═════════════════════════════════════════════")
-        print(f"")
+        # Используем SMS сервис
+        sms_service = SMSService()
         
-        # ВРЕМЕННО ОТКЛЮЧЕНО - когда купите SMS API, раскомментируйте:
-        """
-        if not settings.SMS_API_KEY:
-            return False
+        message = f"Ваш код подтверждения AlertMe: {code}\nДействителен 10 минут"
         
-        message = f"Ваш код подтверждения: {code}\n\nSafety App"
-        
-        response = requests.post(
-            settings.SMS_API_URL,
-            json={
-                'key': settings.SMS_API_KEY,
-                'phone': phone,
-                'message': message,
-            },
-            timeout=10
+        success = sms_service.send_sms(
+            to_phone=phone,
+            message=message
         )
         
-        if response.status_code == 200:
-            print(f"✅ SMS отправлен на {phone}")
+        if success:
+            logger.info(f"✅ Код подтверждения отправлен на {phone}")
             return True
         else:
-            print(f"❌ SMS ошибка: {response.text}")
+            logger.error(f"❌ Не удалось отправить SMS на {phone}")
             return False
-        """
-        
-        return True  # Возвращаем успех для тестового режима
             
-    except Exception as e:
-        print(f"❌ Ошибка отправки SMS: {e}")
+    except SMSVerification.DoesNotExist:
+        logger.error(f"❌ SMSVerification с ID {sms_verification_id} не найдена")
         return False
+    except Exception as e:
+        logger.error(f"❌ Ошибка отправки SMS: {e}", exc_info=True)
+        return False
+
+
+def cleanup_expired_verifications():
+    """Очистка истекших кодов подтверждения"""
+    from .models import SMSVerification
+    
+    expired_count, _ = SMSVerification.objects.filter(
+        expires_at__lt=timezone.now(),
+        is_verified=False
+    ).delete()
+    
+    logger.info(f"✅ Удалено {expired_count} истекших кодов подтверждения")

@@ -29,24 +29,11 @@ class SOSAlertSerializer(serializers.ModelSerializer):
 
 
 class SOSAlertCreateSerializer(serializers.ModelSerializer):
-    latitude = serializers.DecimalField(
-        max_digits=12, 
-        decimal_places=8, 
-        required=True,
-        error_messages={
-            'required': 'Требуется координата широты',
-            'invalid': 'Неверный формат координаты',
-        }
-    )
-    longitude = serializers.DecimalField(
-        max_digits=12, 
-        decimal_places=8, 
-        required=True,
-        error_messages={
-            'required': 'Требуется координата долготы',
-            'invalid': 'Неверный формат координаты',
-        }
-    )
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
+    location_accuracy = serializers.FloatField(required=False, allow_null=True)
+    latitude = serializers.FloatField(required=False, allow_null=True)
+    longitude = serializers.FloatField(required=False, allow_null=True)
     location_accuracy = serializers.FloatField(required=False, allow_null=True)
     address = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True, allow_null=True)
@@ -57,23 +44,23 @@ class SOSAlertCreateSerializer(serializers.ModelSerializer):
                  'audio_file', 'video_file', 'activation_method', 'notes', 'device_info']
     
     def validate_latitude(self, value):
-        if value is None:
-            raise serializers.ValidationError('Требуется координата широты')
-        
-        lat = float(value)
-        if not (-90 <= lat <= 90):
-            raise serializers.ValidationError('Широта должна быть между -90 и 90')
-        
+        if value is not None:
+            try:
+                lat = float(value)
+                if not (-90 <= lat <= 90):
+                    raise serializers.ValidationError('Широта должна быть между -90 и 90')
+            except (TypeError, ValueError):
+                raise serializers.ValidationError('Неверный формат координаты широты')
         return value
     
     def validate_longitude(self, value):
-        if value is None:
-            raise serializers.ValidationError('Требуется координата долготы')
-        
-        lon = float(value)
-        if not (-180 <= lon <= 180):
-            raise serializers.ValidationError('Долгота должна быть между -180 и 180')
-        
+        if value is not None:
+            try:
+                lon = float(value)
+                if not (-180 <= lon <= 180):
+                    raise serializers.ValidationError('Долгота должна быть между -180 и 180')
+            except (TypeError, ValueError):
+                raise serializers.ValidationError('Неверный формат координаты долготы')
         return value
     
     def create(self, validated_data):

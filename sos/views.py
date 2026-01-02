@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.db import transaction
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -57,22 +58,14 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
         
         contact_ids = list(contacts.values_list('id', flat=True))
         
-        # Пытаемся отправить асинхронно
-        try:
-            send_sos_notifications.delay(sos_alert.id, contact_ids)
-            logger.info("✅ Уведомления запланированы (async)")
-        except Exception as e:
-            # Fallback: синхронная отправка
-            logger.warning(f"⚠️ Celery недоступен, синхронная отправка: {e}")
-            from .tasks import send_sos_notifications_sync
-            send_sos_notifications_sync(sos_alert.id, contact_ids)
+        # Отправляем уведомления синхронно
+        send_sos_notifications(sos_alert.id, contact_ids)
+        logger.info("✅ SOS уведомления отправлены")
         
         # Обработка медиа
         if sos_alert.audio_file or sos_alert.video_file:
-            try:
-                process_sos_media.delay(sos_alert.id)
-            except Exception:
-                logger.warning("⚠️ Медиа обработка пропущена")
+            process_sos_media(sos_alert.id)
+            logger.info("✅ Медиа обработаны")
         
         headers = self.get_success_headers(serializer.data)
         return Response(
@@ -95,6 +88,67 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
         
         sos_alert.save()
         return Response(SOSAlertSerializer(sos_alert).data)
+    
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_audio(self, request, pk=None):
+        """Загрузка и отправка аудио в Telegram"""
+        sos_alert = self.get_object()
+        
+        audio_file = request.FILES.get('audio')
+        if not audio_file:
+            return Response(
+                {'error': 'No audio file provided'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Сохраняем аудио
+        sos_alert.audio_file = audio_file
+        sos_alert.save()
+        
+        # Отправляем в Telegram
+        try:
+            from notifications.services import NotificationService
+            from contacts.models import EmergencyContact
+            
+            service = NotificationService()
+            contacts = EmergencyContact.objects.filter(
+                user=request.user,
+                is_active=True,
+                telegram_username__isnull=False
+            )
+            
+            user = request.user
+            user_name = f"{user.first_name} {user.last_name}".strip() or str(user.phone_number)
+            
+            caption = (
+                f"🚨 SOS от {user_name}\n"
+                f"📍 {sos_alert.address or 'Неизвестно'}\n"
+                f"⏰ {sos_alert.created_at.strftime('%H:%M, %d.%m.%Y')}"
+            )
+            
+            sent_count = 0
+            for contact in contacts:
+                success = service.send_audio_to_telegram(
+                    telegram_username=contact.telegram_username,
+                    audio_path=sos_alert.audio_file.path,
+                    caption=caption
+                )
+                if success:
+                    sent_count += 1
+            
+            return Response({
+                'success': True,
+                'sent_to': sent_count,
+                'total_contacts': contacts.count(),
+                'audio_url': request.build_absolute_uri(sos_alert.audio_file.url)
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка отправки аудио: {e}", exc_info=True)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=False, methods=['get'])
     def active(self, request):
@@ -172,4 +226,6 @@ class ActivityTimerViewSet(viewsets.ModelViewSet):
         if active_timer:
             return Response(self.get_serializer(active_timer).data)
         return Response({'detail': 'No active timer'}, status=status.HTTP_404_NOT_FOUND)
+    
+    
 

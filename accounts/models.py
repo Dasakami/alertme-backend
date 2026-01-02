@@ -84,6 +84,13 @@ class User(AbstractUser):
         verbose_name='Firebase Token'
     )
     
+    # ПРЕМИУМ статус (денормализованное поле для быстрой проверки)
+    is_premium = models.BooleanField(
+        default=False,
+        verbose_name='Is Premium',
+        db_index=True
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

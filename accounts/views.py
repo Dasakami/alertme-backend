@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import SMSVerification, UserDevice
@@ -45,13 +46,25 @@ class SendSMSVerificationView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         sms_verification = serializer.save()
         
-        # Send SMS asynchronously
-        send_verification_sms.delay(sms_verification.id)
+        # Отправляем SMS синхронно через Twilio (без Redis/Celery для MVP)
+        from notifications.sms_service import SMSService
+        sms_service = SMSService()
+        
+        message = f"Ваш код подтверждения AlertMe: {sms_verification.code}\nДействителен 10 минут"
+        success = sms_service.send_sms(
+            to_phone=str(sms_verification.phone_number),
+            message=message
+        )
+        
+        if success:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"✅ SMS код отправлен на {sms_verification.phone_number}")
         
         return Response({
             'detail': 'Verification code sent',
-            'phone_number': str(sms_verification.phone_number),
-            'code': sms_verification.code  # ДЛЯ ТЕСТИРОВАНИЯ! Убрать в продакшене
+            'phone_number': str(sms_verification.phone_number)
+            # Без тестового кода - используется реальный Twilio
         })
 
 
@@ -155,6 +168,7 @@ class CustomTokenObtainView(APIView):
 class UserProfileViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
+    parser_classes = (MultiPartParser, FormParser)
 
     def get_queryset(self):
         return User.objects.filter(id=self.request.user.id)

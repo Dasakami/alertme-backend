@@ -6,14 +6,14 @@ from .models import User, SMSVerification, UserDevice
 class CustomUserAdmin(UserAdmin):
     model = User
     
-    list_display = ('phone_number', 'email', 'first_name', 'last_name', 
-                    'is_staff', 'is_active', 'is_phone_verified')
-    list_filter = ('is_staff', 'is_superuser', 'is_active', 'is_phone_verified')
+    list_display = ('phone_number', 'first_name', 'last_name', 'email', 
+                    'is_premium', 'is_phone_verified', 'is_staff', 'is_active')
+    list_filter = ('is_premium', 'is_staff', 'is_superuser', 'is_active', 'is_phone_verified')
     
     fieldsets = (
         (None, {'fields': ('phone_number', 'username', 'password')}),
-        ('Personal info', {'fields': ('first_name', 'last_name', 'email', 'avatar')}),
-        ('Settings', {'fields': ('language', 'fcm_token', 'is_phone_verified')}),
+        ('Personal info', {'fields': ('first_name', 'last_name', 'email', 'avatar', 'telegram_username')}),
+        ('Settings', {'fields': ('language', 'fcm_token', 'is_phone_verified', 'is_premium')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 
                                     'groups', 'user_permissions')}),
         ('Important dates', {'fields': ('last_login', 'date_joined')}),

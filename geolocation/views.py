@@ -33,7 +33,7 @@ class LocationHistoryViewSet(viewsets.ModelViewSet):
         location = serializer.save(user=self.request.user)
         
         # Check geozones after saving location
-        check_geozone_events.delay(self.request.user.id, location.id)
+        check_geozone_events(self.request.user.id, location.id)
 
     @action(detail=False, methods=['get'])
     def current(self, request):

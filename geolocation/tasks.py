@@ -1,4 +1,3 @@
-from celery import shared_task
 from django.contrib.auth import get_user_model
 from .models import LocationHistory, Geozone, GeozoneEvent
 from math import radians, sin, cos, sqrt, atan2
@@ -22,7 +21,6 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 
-@shared_task
 def check_geozone_events(user_id, location_id):
     """Check if user entered or exited any geozones"""
     try:
@@ -61,7 +59,7 @@ def check_geozone_events(user_id, location_id):
                         latitude=current_location.latitude,
                         longitude=current_location.longitude
                     )
-                    send_geozone_notification.delay(event.id)
+                    send_geozone_notification(event.id)
                 
                 elif not is_inside and was_inside and geozone.notify_on_exit:
                     # User exited zone
@@ -72,7 +70,7 @@ def check_geozone_events(user_id, location_id):
                         latitude=current_location.latitude,
                         longitude=current_location.longitude
                     )
-                    send_geozone_notification.delay(event.id)
+                    send_geozone_notification(event.id)
             else:
                 # First time checking, only create enter event if inside
                 if is_inside and geozone.notify_on_enter:
@@ -83,7 +81,7 @@ def check_geozone_events(user_id, location_id):
                         latitude=current_location.latitude,
                         longitude=current_location.longitude
                     )
-                    send_geozone_notification.delay(event.id)
+                    send_geozone_notification(event.id)
         
         return True
     except Exception as e:
@@ -91,7 +89,6 @@ def check_geozone_events(user_id, location_id):
         return False
 
 
-@shared_task
 def send_geozone_notification(event_id):
     """Send notification for geozone event"""
     try:
@@ -113,8 +110,8 @@ def send_geozone_notification(event_id):
         for contact in contacts:
             message = _generate_geozone_message(event)
             
-            # Import SMS task
-            from sos.tasks import send_sms_notification
+            # Import SMS service
+            from notifications.sms_service import SMSService
             from sos.models import SOSNotification
             
             notif = SOSNotification.objects.create(
@@ -123,7 +120,19 @@ def send_geozone_notification(event_id):
                 notification_type='sms',
                 content=message
             )
-            send_sms_notification.delay(notif.id)
+            
+            # Send SMS synchronously
+            sms_service = SMSService()
+            success = sms_service.send_sms(
+                to_phone=str(contact.phone_number),
+                message=message
+            )
+            
+            if success:
+                notif.status = 'sent'
+            else:
+                notif.status = 'failed'
+            notif.save()
         
         event.notification_sent = True
         event.save()
@@ -150,7 +159,6 @@ def _generate_geozone_message(event):
     return message
 
 
-@shared_task
 def cleanup_old_location_history():
     """Clean up location history older than 90 days"""
     from django.utils import timezone

@@ -1,4 +1,3 @@
-from celery import shared_task
 from django.conf import settings
 from django.utils import timezone
 import logging
@@ -11,12 +10,14 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
     try:
         from .models import SOSAlert, SOSNotification
         from contacts.models import EmergencyContact
-        from notifications.services import NotificationService
+        from notifications.sms_service import SMSService
+        from notifications.media_service import MediaService
+        from django.conf import settings
         
         sos_alert = SOSAlert.objects.get(id=sos_alert_id)
         contacts = EmergencyContact.objects.filter(id__in=contact_ids)
         
-        notification_service = NotificationService()
+        sms_service = SMSService()
         
         user = sos_alert.user
         user_name = f"{user.first_name} {user.last_name}".strip() or str(user.phone_number)
@@ -31,23 +32,42 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                 content=f"SOS от {user_name}"
             )
             
-            result = notification_service.send_sos_alert(
-                to_phone=str(contact.phone_number),
+            # Создаем сообщение
+            message = _format_sos_message(
                 user_name=user_name,
                 latitude=float(sos_alert.latitude) if sos_alert.latitude else 0,
                 longitude=float(sos_alert.longitude) if sos_alert.longitude else 0,
                 address=sos_alert.address or None,
-                telegram_username=contact.telegram_username
+                sos_alert_id=sos_alert_id
             )
             
-            if result['success']:
+            # Отправляем SMS
+            media_urls = []
+            if sos_alert.audio_file:
+                try:
+                    media_urls.append(sos_alert.audio_file.url)
+                except Exception:
+                    pass
+            if sos_alert.video_file:
+                try:
+                    media_urls.append(sos_alert.video_file.url)
+                except Exception:
+                    pass
+
+            success = sms_service.send_sms(
+                to_phone=str(contact.phone_number),
+                message=message,
+                media_urls=media_urls if media_urls else None
+            )
+            
+            if success:
                 notif.status = 'sent'
                 notif.sent_at = timezone.now()
-                notif.notification_type = result['method']
+                notif.notification_type = 'sms'
                 success_count += 1
             else:
                 notif.status = 'failed'
-                notif.error_message = result.get('error', 'Unknown error')
+                notif.error_message = 'SMS delivery failed'
             
             notif.save()
         
@@ -59,24 +79,89 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
         return False
 
 
-@shared_task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3})
-def send_sos_notifications(self, sos_alert_id, contact_ids):
-    """Асинхронная отправка SOS уведомлений через Celery"""
+def _format_sos_message(
+    user_name: str,
+    latitude: float,
+    longitude: float,
+    address: str = None,
+    sos_alert_id: int = None
+) -> str:
+    """Форматирование SOS сообщения для SMS - правильный формат для пользователя"""
+    
+    # Форматируем координаты
+    coords_text = f"{latitude:.4f}, {longitude:.4f}"
+    
+    # Основное сообщение - "Срочная тревога от [номер]"
+    base_url = getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000').rstrip('/')
+    
+    message = f"🚨 Срочная тревога от {user_name}\n\n"
+    
+    # Адрес если есть
+    if address:
+        message += f"📍 {address}\n"
+    else:
+        message += f"📍 Координаты: {coords_text}\n"
+    
+    # Ссылка на медиа
+    if sos_alert_id:
+        message += f"\n🎬 Медиа: {base_url}/media/sos/{sos_alert_id}/"
+    
+    message += f"\n\n🗺️ Карта: https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
+    
+    return message
+
+
+def send_sos_notifications(sos_alert_id, contact_ids):
+    """Отправка SOS уведомлений (синхронная)"""
     return send_sos_notifications_sync(sos_alert_id, contact_ids)
 
 
-@shared_task
 def process_sos_media(sos_alert_id):
     """Обработка медиа файлов SOS"""
     try:
         from .models import SOSAlert
+        from notifications.models import SOSMediaLog
+        from notifications.media_service import MediaService
         
         sos_alert = SOSAlert.objects.get(id=sos_alert_id)
         
-        # Здесь можно:
-        # - Сжать аудио/видео
-        # - Загрузить в облако (S3)
-        # - Извлечь метаданные
+        # Обработка аудио
+        if sos_alert.audio_file:
+            try:
+                file_size = sos_alert.audio_file.size
+                
+                SOSMediaLog.objects.create(
+                    sos_alert=sos_alert,
+                    media_type='audio',
+                    file_path=sos_alert.audio_file.name,
+                    file_size=file_size,
+                    upload_status='uploaded',
+                    media_url=sos_alert.audio_file.url,
+                    uploaded_at=timezone.now()
+                )
+                
+                logger.info(f"✅ Аудио обработано для SOS {sos_alert_id}")
+            except Exception as e:
+                logger.error(f"❌ Ошибка обработки аудио: {e}")
+        
+        # Обработка видео
+        if sos_alert.video_file:
+            try:
+                file_size = sos_alert.video_file.size
+                
+                SOSMediaLog.objects.create(
+                    sos_alert=sos_alert,
+                    media_type='video',
+                    file_path=sos_alert.video_file.name,
+                    file_size=file_size,
+                    upload_status='uploaded',
+                    media_url=sos_alert.video_file.url,
+                    uploaded_at=timezone.now()
+                )
+                
+                logger.info(f"✅ Видео обработано для SOS {sos_alert_id}")
+            except Exception as e:
+                logger.error(f"❌ Ошибка обработки видео: {e}")
         
         logger.info(f"✅ Медиа обработаны для SOS {sos_alert_id}")
         return True
@@ -85,7 +170,6 @@ def process_sos_media(sos_alert_id):
         return False
 
 
-@shared_task
 def check_expired_timers():
     """Проверка истекших таймеров активности"""
     try:

@@ -45,12 +45,12 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Trigger async notifications
-        send_sos_notifications.delay(sos_alert.id, list(contacts.values_list('id', flat=True)))
+        # Trigger notifications
+        send_sos_notifications(sos_alert.id, list(contacts.values_list('id', flat=True)))
         
         # Process media files if provided
         if sos_alert.audio_file or sos_alert.video_file:
-            process_sos_media.delay(sos_alert.id)
+            process_sos_media(sos_alert.id)
         
         headers = self.get_success_headers(serializer.data)
         return Response(

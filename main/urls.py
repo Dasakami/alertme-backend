@@ -19,6 +19,7 @@ from subscriptions.views import (
     PaymentViewSet,
     ActivationCodeViewSet  
 )
+from notifications.views import media_preview
 
 router = DefaultRouter()
 
@@ -52,6 +53,8 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
     path('', include(router.urls)),
+    # Simple media preview for SOS (development)
+    path('media/sos/<int:sos_id>/', media_preview),
 ]
 
 if settings.DEBUG:
