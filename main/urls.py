@@ -52,9 +52,8 @@ urlpatterns = [
     path('auth/login/', CustomTokenObtainView.as_view(), name='login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
-    path('', include(router.urls)),
-    # Simple media preview for SOS (development)
-    path('media/sos/<int:sos_id>/', media_preview),
+    path('', include(router.urls)),    
+    path('media/sos/<int:sos_id>/', media_preview, name='media_preview'),
 ]
 
 if settings.DEBUG:
