@@ -12,8 +12,11 @@ from .serializers import (
     UserSerializer, UserDeviceSerializer
 )
 from .tasks import send_verification_sms
+import logging
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
+
 
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserRegistrationSerializer
@@ -24,7 +27,6 @@ class UserRegistrationView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         
-        # Generate tokens
         refresh = RefreshToken.for_user(user)
         
         return Response({
@@ -46,7 +48,6 @@ class SendSMSVerificationView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         sms_verification = serializer.save()
         
-        # Отправляем SMS синхронно через Twilio (без Redis/Celery для MVP)
         from notifications.sms_service import SMSService
         sms_service = SMSService()
         
@@ -57,14 +58,11 @@ class SendSMSVerificationView(generics.CreateAPIView):
         )
         
         if success:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.info(f"✅ SMS код отправлен на {sms_verification.phone_number}")
         
         return Response({
             'detail': 'Verification code sent',
             'phone_number': str(sms_verification.phone_number)
-            # Без тестового кода - используется реальный Twilio
         })
 
 
@@ -80,13 +78,11 @@ class VerifySMSView(generics.CreateAPIView):
         sms_verification.is_verified = True
         sms_verification.save()
         
-        # Check if user exists with this phone number
         try:
             user = User.objects.get(phone_number=sms_verification.phone_number)
             user.is_phone_verified = True
             user.save()
             
-            # Generate tokens
             refresh = RefreshToken.for_user(user)
             
             return Response({
@@ -104,12 +100,10 @@ class VerifySMSView(generics.CreateAPIView):
             })
 
 
-
-
 from drf_spectacular.utils import extend_schema, OpenApiExample
 from rest_framework import serializers
 
-class LoginSerializer(serializers.Serializer):  # НОВОЕ
+class LoginSerializer(serializers.Serializer):
     phone_number = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
@@ -129,7 +123,7 @@ class LoginSerializer(serializers.Serializer):  # НОВОЕ
 )
 class CustomTokenObtainView(APIView):
     permission_classes = [AllowAny]
-    serializer_class = LoginSerializer  # ДОБАВЛЕНО
+    serializer_class = LoginSerializer
     
     def post(self, request):
         phone_number = request.data.get('phone_number')
@@ -165,7 +159,14 @@ class CustomTokenObtainView(APIView):
             }
         })
 
+
 class UserProfileViewSet(viewsets.ModelViewSet):
+    """
+    ГЛАВНЫЙ API ДЛЯ РАБОТЫ С ПРОФИЛЕМ
+    
+    GET /api/users/me/ - получить данные текущего пользователя
+    PUT/PATCH /api/users/update-profile/ - обновить профиль
+    """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = (MultiPartParser, FormParser)
@@ -175,20 +176,73 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def me(self, request):
-        serializer = self.get_serializer(request.user)
+        """
+        ✅ ЕДИНАЯ ТОЧКА для получения данных пользователя
+        
+        Возвращает:
+        - Все данные профиля
+        - Premium статус (is_premium)
+        - Telegram username
+        - Аватар и т.д.
+        """
+        user = request.user
+        
+        # Обновляем is_premium из подписки
+        try:
+            from subscriptions.models import UserSubscription
+            from django.utils import timezone
+            
+            subscription = UserSubscription.objects.select_related('plan').get(user=user)
+            
+            # Проверяем не истекла ли подписка
+            if subscription.status == 'active' and subscription.end_date <= timezone.now():
+                subscription.status = 'expired'
+                subscription.save(update_fields=['status'])
+            
+            # Обновляем is_premium
+            user.is_premium = (
+                subscription.status == 'active' and 
+                subscription.plan.plan_type != 'free'
+            )
+            user.save(update_fields=['is_premium'])
+            
+        except UserSubscription.DoesNotExist:
+            # Нет подписки = не премиум
+            if user.is_premium:
+                user.is_premium = False
+                user.save(update_fields=['is_premium'])
+        
+        serializer = self.get_serializer(user)
         return Response(serializer.data)
 
     @action(detail=False, methods=['put', 'patch'])
     def update_profile(self, request):
-        """Обновление профиля пользователя"""
+        """
+        ✅ ОБНОВЛЕНИЕ ПРОФИЛЯ
+        
+        Принимает:
+        - first_name
+        - last_name
+        - email
+        - telegram_username
+        - language
+        """
+        user = request.user
         serializer = self.get_serializer(
-            request.user,
+            user,
             data=request.data,
             partial=True
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        
+        logger.info(f"✅ Профиль обновлен: {user.phone_number}")
+        
+        return Response({
+            'success': True,
+            'message': 'Профиль успешно обновлен',
+            'user': serializer.data
+        })
 
 
 class UserDeviceViewSet(viewsets.ModelViewSet):
@@ -204,4 +258,3 @@ class UserDeviceViewSet(viewsets.ModelViewSet):
         device.is_active = False
         device.save()
         return Response({'detail': 'Device deactivated'})
-    

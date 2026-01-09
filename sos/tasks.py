@@ -6,12 +6,27 @@ logger = logging.getLogger(__name__)
 
 
 def send_sos_notifications_sync(sos_alert_id, contact_ids):
-    """Синхронная отправка SOS уведомлений (fallback)"""
+    """
+    ✅ ИСПРАВЛЕННАЯ отправка SOS уведомлений
+    
+    Формат сообщения:
+    🚨 ЭКСТРЕННАЯ ТРЕВОГА!
+    
+    [Имя] активировал SOS!
+    
+    📍 Адрес: [адрес]
+    🗺️ Карта: [ссылка на Google Maps]
+    
+    🎬 Медиа (аудио/видео): [ссылка]
+    
+    ⏰ Время: HH:MM, DD.MM.YYYY
+    
+    ❗ Это автоматическое сообщение из AlertMe
+    """
     try:
         from .models import SOSAlert, SOSNotification
         from contacts.models import EmergencyContact
         from notifications.sms_service import SMSService
-        from notifications.media_service import MediaService
         from django.conf import settings
         
         sos_alert = SOSAlert.objects.get(id=sos_alert_id)
@@ -32,13 +47,15 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                 content=f"SOS от {user_name}"
             )
             
-            # Создаем сообщение
-            message = _format_sos_message(
+            # ✅ ИСПРАВЛЕННОЕ форматирование сообщения
+            message = _format_sos_message_fixed(
                 user_name=user_name,
-                latitude=float(sos_alert.latitude) if sos_alert.latitude else 0,
-                longitude=float(sos_alert.longitude) if sos_alert.longitude else 0,
+                latitude=float(sos_alert.latitude) if sos_alert.latitude else None,
+                longitude=float(sos_alert.longitude) if sos_alert.longitude else None,
                 address=sos_alert.address or None,
-                sos_alert_id=sos_alert_id
+                sos_alert_id=sos_alert_id,
+                has_audio=bool(sos_alert.audio_file),
+                has_video=bool(sos_alert.video_file)
             )
             
             # Отправляем SMS
@@ -71,7 +88,7 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
             
             notif.save()
         
-        logger.info(f"✅ Отправлено {success_count}/{len(contacts)} уведомлений")
+        logger.info(f"✅ Отправлено {success_count}/{len(contacts)} SOS уведомлений")
         return True
         
     except Exception as e:
@@ -79,34 +96,59 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
         return False
 
 
-def _format_sos_message(
+def _format_sos_message_fixed(
     user_name: str,
-    latitude: float,
-    longitude: float,
+    latitude: float = None,
+    longitude: float = None,
     address: str = None,
-    sos_alert_id: int = None
+    sos_alert_id: int = None,
+    has_audio: bool = False,
+    has_video: bool = False
 ) -> str:
-    """Форматирование SOS сообщения для SMS - правильный формат для пользователя"""
+    """
+    ✅ ИСПРАВЛЕННОЕ форматирование SOS сообщения
     
-    # Форматируем координаты
-    coords_text = f"{latitude:.4f}, {longitude:.4f}"
-    
-    # Основное сообщение - "Срочная тревога от [номер]"
+    Красивое, информативное сообщение с:
+    - Адресом (если есть)
+    - Ссылкой на Google Maps
+    - Ссылкой на медиа (аудио/видео)
+    - Временем активации
+    """
     base_url = getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000').rstrip('/')
     
-    message = f"🚨 Срочная тревога от {user_name}\n\n"
+    # 🚨 Заголовок
+    message = "🚨 ЭКСТРЕННАЯ ТРЕВОГА!\n\n"
+    message += f"{user_name} активировал SOS!\n\n"
     
-    # Адрес если есть
+    # 📍 Адрес или координаты
     if address:
-        message += f"📍 {address}\n"
-    else:
-        message += f"📍 Координаты: {coords_text}\n"
+        message += f"📍 Адрес:\n{address}\n\n"
+    elif latitude and longitude:
+        message += f"📍 Координаты:\n{latitude:.4f}, {longitude:.4f}\n\n"
     
-    # Ссылка на медиа
-    if sos_alert_id:
-        message += f"\n🎬 Медиа: {base_url}/media/sos/{sos_alert_id}/"
+    # 🗺️ Ссылка на карту
+    if latitude and longitude:
+        google_maps_url = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
+        message += f"🗺️ Карта:\n{google_maps_url}\n\n"
     
-    message += f"\n\n🗺️ Карта: https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
+    # 🎬 Ссылка на медиа (если есть аудио или видео)
+    if (has_audio or has_video) and sos_alert_id:
+        media_url = f"{base_url}/api/media/sos/{sos_alert_id}/"
+        media_types = []
+        if has_audio:
+            media_types.append("аудио")
+        if has_video:
+            media_types.append("видео")
+        
+        message += f"🎬 Медиа ({', '.join(media_types)}):\n{media_url}\n\n"
+    
+    # ⏰ Время
+    now = timezone.now()
+    message += f"⏰ Время: {now.strftime('%H:%M, %d.%m.%Y')}\n\n"
+    
+    # ❗ Подпись
+    message += "❗ ПОМОГИТЕ ЕМУ СРОЧНО!\n"
+    message += "Это автоматическое сообщение из AlertMe"
     
     return message
 

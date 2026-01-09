@@ -1,4 +1,4 @@
-# subscriptions/views.py - ОПТИМИЗИРОВАННАЯ ВЕРСИЯ
+# subscriptions/views.py - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ВЕРСИЯ
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -47,31 +47,52 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
         return UserSubscription.objects.filter(user=self.request.user)
 
     @extend_schema(
-        description="Получить текущую подписку с проверкой срока",
-        responses={200: UserSubscriptionSerializer}
+        description="✅ Получить текущую подписку (ЕДИНЫЙ ЗАПРОС)",
+        responses={200: dict}
     )
     @action(detail=False, methods=['get'])
     def current(self, request):
-        """Один запрос для получения статуса подписки"""
+        """
+        ✅ ОДИН ЗАПРОС ДЛЯ ПРОВЕРКИ ПОДПИСКИ
+        
+        Возвращает актуальную информацию о подписке
+        и автоматически обновляет is_premium
+        """
         try:
             subscription = UserSubscription.objects.select_related('plan').get(
                 user=request.user
             )
             
-            # Проверяем статус и обновляем если нужно
+            # Проверяем статус и обновляем если истек
             now = timezone.now()
             
             if subscription.status == 'active' and subscription.end_date <= now:
                 subscription.status = 'expired'
                 subscription.save(update_fields=['status'])
-                logger.info(f"✅ Подписка истекла для {request.user.phone_number}")
+                
+                # Обновляем is_premium пользователя
+                request.user.is_premium = False
+                request.user.save(update_fields=['is_premium'])
+                
+                logger.info(f"⏰ Подписка истекла для {request.user.phone_number}")
+            
+            # Проверяем соответствие is_premium
+            is_premium = (
+                subscription.status == 'active' and 
+                subscription.plan.plan_type != 'free'
+            )
+            
+            if request.user.is_premium != is_premium:
+                request.user.is_premium = is_premium
+                request.user.save(update_fields=['is_premium'])
+                logger.info(f"🔄 is_premium обновлен для {request.user.phone_number}: {is_premium}")
             
             # Возвращаем единую структуру
             return Response({
                 'id': subscription.id,
                 'plan': SubscriptionPlanSerializer(subscription.plan).data,
                 'status': subscription.status,
-                'is_premium': subscription.status == 'active' and subscription.plan.plan_type != 'free',
+                'is_premium': is_premium,
                 'days_remaining': max(0, (subscription.end_date - now).days) if subscription.status == 'active' else 0,
                 'end_date': subscription.end_date.isoformat(),
                 'payment_period': subscription.payment_period,
@@ -80,6 +101,10 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
                 
         except UserSubscription.DoesNotExist:
             # Нет подписки = Free план
+            if request.user.is_premium:
+                request.user.is_premium = False
+                request.user.save(update_fields=['is_premium'])
+            
             return Response({
                 'id': None,
                 'plan': {'plan_type': 'free', 'name': 'Free'},
@@ -205,15 +230,10 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
 
 @extend_schema_view(
     activate=extend_schema(
-        description="Активировать код подписки",
+        description="✅ Активировать код подписки",
         request={'application/json': {'type': 'object', 'properties': {'code': {'type': 'string'}}}},
         responses={200: dict, 400: dict, 404: dict}
     ),
-    check=extend_schema(
-        description="Проверить код без активации",
-        request={'application/json': {'type': 'object', 'properties': {'code': {'type': 'string'}}}},
-        responses={200: dict, 404: dict}
-    )
 )
 class ActivationCodeViewSet(viewsets.ViewSet):
     """ViewSet для активации кодов из Telegram"""
@@ -222,7 +242,14 @@ class ActivationCodeViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['post'])
     def activate(self, request):
-        """Активация кода с созданием/обновлением подписки"""
+        """
+        ✅ ИСПРАВЛЕННАЯ АКТИВАЦИЯ КОДА
+        
+        1. Проверяет валидность кода
+        2. Создает/обновляет подписку
+        3. ✅ ОБНОВЛЯЕТ is_premium пользователя
+        4. Возвращает актуальные данные
+        """
         code_str = request.data.get('code', '').strip().upper()
         
         if not code_str:
@@ -248,19 +275,29 @@ class ActivationCodeViewSet(viewsets.ViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Активируем код
+            # ✅ АКТИВИРУЕМ КОД
             try:
                 subscription = activation_code.activate_for_user(request.user)
+                
+                # ✅ КРИТИЧНО: Обновляем is_premium
+                request.user.is_premium = True
+                request.user.save(update_fields=['is_premium'])
+                
+                # Перезагружаем данные
+                request.user.refresh_from_db()
                 subscription.refresh_from_db()
                 
                 logger.info(
                     f"✅ Код {code_str} активирован для {request.user.phone_number}. "
-                    f"Подписка до {subscription.end_date}"
+                    f"is_premium={request.user.is_premium}, подписка до {subscription.end_date}"
                 )
                 
                 return Response({
                     'success': True,
                     'message': f'Premium подписка активирована до {subscription.end_date.strftime("%d.%m.%Y")}',
+                    'user': {
+                        'is_premium': request.user.is_premium,
+                    },
                     'subscription': {
                         'id': subscription.id,
                         'plan': subscription.plan.name,
@@ -287,31 +324,4 @@ class ActivationCodeViewSet(viewsets.ViewSet):
             return Response(
                 {'success': False, 'error': f'Ошибка активации: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-    
-    @action(detail=False, methods=['post'])
-    def check(self, request):
-        """Проверка кода без активации"""
-        code_str = request.data.get('code', '').strip().upper()
-        
-        if not code_str:
-            return Response(
-                {'error': 'Введите код'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            activation_code = ActivationCode.objects.select_related('plan').get(code=code_str)
-            
-            return Response({
-                'valid': activation_code.is_valid(),
-                'plan': activation_code.plan.name,
-                'is_used': activation_code.is_used,
-                'expires_at': activation_code.expires_at.isoformat(),
-            })
-            
-        except ActivationCode.DoesNotExist:
-            return Response(
-                {'valid': False, 'error': 'Код не найден'},
-                status=status.HTTP_404_NOT_FOUND
             )
