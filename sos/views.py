@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.utils import timezone
 from django.db import transaction
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -19,12 +19,15 @@ logger = logging.getLogger(__name__)
 
 @extend_schema_view(
     list=extend_schema(description="Список SOS сигналов"),
-    create=extend_schema(description="Создать SOS сигнал"),
+    create=extend_schema(description="Создать SOS сигнал с аудио"),
 )
 class SOSAlertViewSet(viewsets.ModelViewSet):
     serializer_class = SOSAlertSerializer
     permission_classes = [IsAuthenticated]
     queryset = SOSAlert.objects.none()
+    
+    # ✅ ВАЖНО: Поддержка multipart для загрузки файлов
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
@@ -40,37 +43,77 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        """Создание SOS без медиа (медиа загружается отдельно)"""
+        """✅ ОБНОВЛЕНО: Создание SOS с аудио файлом"""
+        
+        logger.info(f"📥 Получен запрос на создание SOS")
+        logger.info(f"📋 Data: {request.data}")
+        logger.info(f"📎 Files: {request.FILES}")
+        
+        # Проверяем есть ли аудио файл
+        audio_file = request.FILES.get('audio_file')
+        video_file = request.FILES.get('video_file')
+        
+        if audio_file:
+            logger.info(f"🎤 Получен аудио файл: {audio_file.name}, размер: {audio_file.size / 1024:.2f} KB")
+        
+        if video_file:
+            logger.info(f"🎬 Получен видео файл: {video_file.name}, размер: {video_file.size / 1024:.2f} KB")
+        
+        # Создаем SOS
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
         sos_alert = serializer.save(user=request.user)
+        logger.info(f"✅ SOS создан с ID: {sos_alert.id}")
         
+        # Сохраняем аудио файл если есть
+        if audio_file:
+            sos_alert.audio_file = audio_file
+            sos_alert.save()
+            logger.info(f"✅ Аудио сохранено: {sos_alert.audio_file.name}")
+        
+        # Сохраняем видео файл если есть
+        if video_file:
+            sos_alert.video_file = video_file
+            sos_alert.save()
+            logger.info(f"✅ Видео сохранено: {sos_alert.video_file.name}")
+        
+        # Получаем контакты
         contacts = EmergencyContact.objects.filter(
             user=request.user,
             is_active=True
         )
         
         if not contacts.exists():
+            logger.warning(f"⚠️ У пользователя {request.user.phone_number} нет контактов")
             return Response(
                 {'error': 'No emergency contacts configured'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         contact_ids = list(contacts.values_list('id', flat=True))
+        logger.info(f"📨 Отправка уведомлений на {len(contact_ids)} контактов")
         
-        # Отправляем уведомления синхронно
+        # Отправляем уведомления
         send_sos_notifications(sos_alert.id, contact_ids)
         logger.info("✅ SOS уведомления отправлены")
         
+        # Обработка медиа
+        if sos_alert.audio_file or sos_alert.video_file:
+            process_sos_media(sos_alert.id)
+            logger.info("✅ Медиа обработаны")
+        
+        # Возвращаем полный объект
         headers = self.get_success_headers(serializer.data)
+        response_serializer = SOSAlertSerializer(sos_alert)
+        
         return Response(
-            SOSAlertSerializer(sos_alert).data,
+            response_serializer.data,
             status=status.HTTP_201_CREATED,
             headers=headers
         )
 
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    @action(detail=True, methods=['post'])
     def update_status(self, request, pk=None):
         sos_alert = self.get_object()
         serializer = self.get_serializer(sos_alert, data=request.data, partial=True)
@@ -84,87 +127,6 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
         
         sos_alert.save()
         return Response(SOSAlertSerializer(sos_alert).data)
-    
-    @extend_schema(
-        description="✅ Загрузка аудио файла для SOS",
-        request={'multipart/form-data': {'type': 'object', 'properties': {'audio': {'type': 'string', 'format': 'binary'}}}},
-    )
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
-    def upload_audio(self, request, pk=None):
-        """✅ Загрузка аудио файла"""
-        sos_alert = self.get_object()
-        
-        audio_file = request.FILES.get('audio')
-        if not audio_file:
-            return Response(
-                {'error': 'No audio file provided'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Сохраняем аудио
-        sos_alert.audio_file = audio_file
-        sos_alert.save()
-        
-        logger.info(f"✅ Аудио загружено для SOS {sos_alert.id}: {audio_file.name}")
-        
-        # Обрабатываем медиа
-        process_sos_media(sos_alert.id)
-        
-        # Повторно отправляем уведомления с обновленной информацией
-        contacts = EmergencyContact.objects.filter(
-            user=request.user,
-            is_active=True
-        )
-        
-        if contacts.exists():
-            contact_ids = list(contacts.values_list('id', flat=True))
-            
-            # Отправляем только email уведомления (SMS уже были отправлены)
-            from .tasks import send_email_notifications_only
-            try:
-                send_email_notifications_only(sos_alert.id, contact_ids)
-            except:
-                # Если функция не существует, пропускаем
-                pass
-        
-        return Response({
-            'success': True,
-            'message': 'Audio uploaded successfully',
-            'audio_url': request.build_absolute_uri(sos_alert.audio_file.url) if sos_alert.audio_file else None,
-            'sos_id': sos_alert.id
-        })
-
-    @extend_schema(
-        description="✅ Загрузка видео файла для SOS",
-        request={'multipart/form-data': {'type': 'object', 'properties': {'video': {'type': 'string', 'format': 'binary'}}}},
-    )
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
-    def upload_video(self, request, pk=None):
-        """✅ Загрузка видео файла"""
-        sos_alert = self.get_object()
-        
-        video_file = request.FILES.get('video')
-        if not video_file:
-            return Response(
-                {'error': 'No video file provided'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Сохраняем видео
-        sos_alert.video_file = video_file
-        sos_alert.save()
-        
-        logger.info(f"✅ Видео загружено для SOS {sos_alert.id}: {video_file.name}")
-        
-        # Обрабатываем медиа
-        process_sos_media(sos_alert.id)
-        
-        return Response({
-            'success': True,
-            'message': 'Video uploaded successfully',
-            'video_url': request.build_absolute_uri(sos_alert.video_file.url) if sos_alert.video_file else None,
-            'sos_id': sos_alert.id
-        })
 
     @action(detail=False, methods=['get'])
     def active(self, request):
