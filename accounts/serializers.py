@@ -34,17 +34,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         fields = ['phone_number', 'password', 'password_confirm', 'email', 'language']
 
     def validate_phone_number(self, value):
-        """Валидация номера телефона"""
-        # Конвертируем в строку для проверки
         phone_str = str(value)
-        
-        # Проверяем что номер начинается с +996
         if not phone_str.startswith('+996'):
             raise serializers.ValidationError(
                 'Номер должен начинаться с +996 (например: +996555123456)'
             )
-        
-        # Проверяем длину (должно быть 13 символов: +996XXXXXXXXX)
         if len(phone_str) != 13:
             raise serializers.ValidationError(
                 'Неверный формат номера. Должно быть 9 цифр после +996'
@@ -62,8 +56,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
-        
-        # username генерируется автоматически в модели
         user = User.objects.create(**validated_data)
         user.set_password(password)
         user.save()
@@ -71,13 +63,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 
 class SendSMSSerializer(serializers.Serializer):
-    """Отправка SMS кода"""
     phone_number = PhoneNumberSerializerField(
         help_text='Формат: +996555123456'
     )
     
     def validate_phone_number(self, value):
-        """Валидация номера"""
         phone_str = str(value)
         
         if not phone_str.startswith('+996'):
@@ -94,13 +84,9 @@ class SendSMSSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         phone_number = validated_data['phone_number']
-        
-        # ТЕСТОВЫЙ КОД 123456
         code = '123456'
         
         expires_at = timezone.now() + timedelta(minutes=10)
-        
-        # Удаляем старые неверифицированные коды
         SMSVerification.objects.filter(
             phone_number=phone_number,
             is_verified=False
@@ -163,16 +149,11 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_telegram_username(self, value):
         """Валидация Telegram username"""
         if value:
-            # Убираем @ если пользователь его ввел
             value = value.lstrip('@')
-            
-            # Проверяем что username состоит только из допустимых символов
             if not value.replace('_', '').isalnum():
                 raise serializers.ValidationError(
                     'Username может содержать только буквы, цифры и _'
                 )
-            
-            # Проверяем длину (5-32 символа в Telegram)
             if len(value) < 5 or len(value) > 32:
                 raise serializers.ValidationError(
                     'Username должен быть от 5 до 32 символов'

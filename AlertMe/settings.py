@@ -103,16 +103,12 @@ DATABASES = {
 #     }
 # }
 
-# Use simple in-memory cache for MVP
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',
     }
 }
-# ═══════════════════════════════════════════════════════════════
-# EMAIL НАСТРОЙКИ (Gmail SMTP)
-# ═══════════════════════════════════════════════════════════════
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
@@ -122,8 +118,6 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='yomg xwfw xbtm wshy
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='AlertMe <ddasakami@gmail.com>')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
-# Для отладки можно использовать консольный бэкенд
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
 # DISABLED - Not using WebSockets for MVP
@@ -145,8 +139,6 @@ SERVER_EMAIL = DEFAULT_FROM_EMAIL
 # CELERY_RESULT_SERIALIZER = 'json'
 # CELERY_TASK_TRACK_STARTED = True
 # CELERY_TASK_TIME_LIMIT = 30 * 60
-
-# Force synchronous task execution (no broker connection needed)
 CELERY_TASK_ALWAYS_EAGER = True
 
 
@@ -227,32 +219,11 @@ CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
     default='http://127.0.0.1:3000,http://127.0.0.1:8081,http://10.122.0.53:8000'
 ).split(',')
-
-# ═══════════════════════════════════════════════════════════════
-# TWILIO НАСТРОЙКИ (ПРОДАКШН)
-# ═══════════════════════════════════════════════════════════════
-# Получите на https://www.twilio.com/console
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')  # Формат: +1234567890
-
-# ═══════════════════════════════════════════════════════════════
-# TELEGRAM BOT (MVP/FALLBACK)
-# ═══════════════════════════════════════════════════════════════
-# Получите у @BotFather
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='7205482794:AAFstGWp1aOoLS_L_TNVX74aQzgwGDgKQy8')
-
-# ═══════════════════════════════════════════════════════════════
-# SMS API (ОПЦИОНАЛЬНО - старый метод)
-# ═══════════════════════════════════════════════════════════════
-SMS_API_KEY = config('SMS_API_KEY', default='')
-SMS_API_URL = config('SMS_API_URL', default='https://sms.kg/api/send')
-
-# Базовый URL сервиса (используется для ссылок в SMS)
 SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000')
-# ═══════════════════════════════════════════════════════════════
-# FIREBASE (ОПЦИОНАЛЬНО)
-# ═══════════════════════════════════════════════════════════════
 FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
 
 SOS_VIDEO_DURATION = 3 
@@ -261,7 +232,7 @@ MAX_FREE_CONTACTS = 1
 
 SUBSCRIPTION_PLANS = {
     'personal_premium': {
-        'price_monthly': 100,  # Telegram Stars
+        'price_monthly': 100,  
         'features': {
             'unlimited_contacts': True,
             'geozones': True,
@@ -270,7 +241,6 @@ SUBSCRIPTION_PLANS = {
     }
 }
 
-# Logging
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

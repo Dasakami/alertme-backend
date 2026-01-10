@@ -2,8 +2,12 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import IntegrityError
 from .models import EmergencyContact, ContactGroup
 from .serializers import EmergencyContactSerializer, ContactGroupSerializer
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class EmergencyContactViewSet(viewsets.ModelViewSet):
@@ -15,6 +19,59 @@ class EmergencyContactViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        """✅ ИСПРАВЛЕНО: Обработка ошибки дублирования"""
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError as e:
+            error_message = str(e)
+            
+            if 'phone_number' in error_message.lower():
+                return Response(
+                    {
+                        'error': 'Контакт с таким номером телефона уже существует',
+                        'detail': 'Вы уже добавили контакт с номером +{}'.format(
+                            request.data.get('phone_number', '')
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            elif 'unique' in error_message.lower():
+                return Response(
+                    {
+                        'error': 'Такой контакт уже существует',
+                        'detail': 'Проверьте, возможно вы уже добавили этот контакт'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            else:
+                logger.error(f"Неизвестная ошибка IntegrityError: {e}")
+                return Response(
+                    {'error': 'Ошибка при добавлении контакта'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+    def update(self, request, *args, **kwargs):
+        """✅ ИСПРАВЛЕНО: Обработка ошибки дублирования при обновлении"""
+        try:
+            return super().update(request, *args, **kwargs)
+        except IntegrityError as e:
+            error_message = str(e)
+            
+            if 'phone_number' in error_message.lower():
+                return Response(
+                    {
+                        'error': 'Контакт с таким номером уже существует',
+                        'detail': 'Другой контакт уже использует этот номер телефона'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            else:
+                return Response(
+                    {'error': 'Ошибка при обновлении контакта'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
     @action(detail=True, methods=['post'])
     def set_primary(self, request, pk=None):
@@ -56,8 +113,14 @@ class EmergencyContactViewSet(viewsets.ModelViewSet):
         for contact_data in contacts_data:
             serializer = self.get_serializer(data=contact_data)
             if serializer.is_valid():
-                serializer.save(user=request.user)
-                created_contacts.append(serializer.data)
+                try:
+                    serializer.save(user=request.user)
+                    created_contacts.append(serializer.data)
+                except IntegrityError:
+                    errors.append({
+                        'contact': contact_data,
+                        'error': 'Контакт уже существует'
+                    })
             else:
                 errors.append({
                     'contact': contact_data,
