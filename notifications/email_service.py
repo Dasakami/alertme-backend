@@ -56,7 +56,7 @@ class EmailService:
                 )
             
             if sos_alert_id:
-                base_url = getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000').rstrip('/')
+                base_url = getattr(settings, 'SITE_URL', 'https://alertme-ihww.onrender.com').rstrip('/')
                 media_url = f"{base_url}/api/media/sos/{sos_alert_id}/"
             
             # Контекст для шаблона
