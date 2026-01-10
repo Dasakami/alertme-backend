@@ -23,36 +23,53 @@ from notifications.views import media_preview
 
 router = DefaultRouter()
 
+# Users & Devices
 router.register(r'users', UserProfileViewSet, basename='user')
 router.register(r'devices', UserDeviceViewSet, basename='device')
 
+# Contacts
 router.register(r'emergency-contacts', EmergencyContactViewSet, basename='emergency-contact')
 router.register(r'contact-groups', ContactGroupViewSet, basename='contact-group')
 
+# SOS
 router.register(r'sos-alerts', SOSAlertViewSet, basename='sos-alert')
 router.register(r'activity-timers', ActivityTimerViewSet, basename='activity-timer')
 
+# Geolocation
 router.register(r'location-history', LocationHistoryViewSet, basename='location-history')
 router.register(r'geozones', GeozoneViewSet, basename='geozone')
 router.register(r'shared-locations', SharedLocationViewSet, basename='shared-location')
 
+# Subscriptions
 router.register(r'subscription-plans', SubscriptionPlanViewSet, basename='subscription-plan')
 router.register(r'subscriptions', UserSubscriptionViewSet, basename='subscription')
 router.register(r'payments', PaymentViewSet, basename='payment')
-router.register(r'activation-codes', ActivationCodeViewSet, basename='activation-code')  
+router.register(r'activation-codes', ActivationCodeViewSet, basename='activation-code')
 
 urlpatterns = [
+    # API Docs
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     path('docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     
-    # AUTH endpoints
+    # ✅ AUTH endpoints (без префикса /auth/)
     path('auth/register/', UserRegistrationView.as_view(), name='register'),
     path('auth/send-sms/', SendSMSVerificationView.as_view(), name='send-sms'),
     path('auth/verify-sms/', VerifySMSView.as_view(), name='verify-sms'),
     path('auth/login/', CustomTokenObtainView.as_view(), name='login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     
-    path('', include(router.urls)),    
+    # ✅ ВАЖНО: Эти маршруты ДОЛЖНЫ быть ДО router.urls
+    # Иначе router перехватит их первым
+    path('users/me/', UserProfileViewSet.as_view({'get': 'me'}), name='user-me'),
+    path('users/update-profile/', UserProfileViewSet.as_view({
+        'patch': 'update_profile', 
+        'put': 'update_profile'
+    }), name='user-update-profile'),
+    
+    # Router endpoints (последними!)
+    path('', include(router.urls)),
+    
+    # Media preview
     path('media/sos/<int:sos_id>/', media_preview, name='media_preview'),
 ]
 

@@ -1,4 +1,4 @@
-# subscriptions/views.py - ПОЛНОСТЬЮ ИСПРАВЛЕННАЯ ВЕРСИЯ
+# subscriptions/views.py - УПРОЩЕННАЯ И ИСПРАВЛЕННАЯ ВЕРСИЯ
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 class SubscriptionPlanViewSet(viewsets.ReadOnlyModelViewSet):
+    """Список доступных планов подписки"""
     serializer_class = SubscriptionPlanSerializer
     permission_classes = [AllowAny]
     queryset = SubscriptionPlan.objects.filter(is_active=True)
@@ -47,80 +48,59 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
         return UserSubscription.objects.filter(user=self.request.user)
 
     @extend_schema(
-        description="✅ Получить текущую подписку (ЕДИНЫЙ ЗАПРОС)",
+        description="✅ Получить информацию о подписке (упрощенный вариант)",
         responses={200: dict}
     )
     @action(detail=False, methods=['get'])
     def current(self, request):
         """
-        ✅ ОДИН ЗАПРОС ДЛЯ ПРОВЕРКИ ПОДПИСКИ
+        ✅ УПРОЩЕННАЯ ПРОВЕРКА ПОДПИСКИ
         
-        Возвращает актуальную информацию о подписке
-        и автоматически обновляет is_premium
+        Больше НЕ обновляет is_premium (это делается только при активации кода)
+        Просто возвращает актуальные данные
         """
+        user = request.user
+        
+        # ✅ Просто возвращаем текущий статус
         try:
-            subscription = UserSubscription.objects.select_related('plan').get(
-                user=request.user
-            )
+            subscription = UserSubscription.objects.select_related('plan').get(user=user)
             
-            # Проверяем статус и обновляем если истек
+            # Проверяем не истекла ли подписка
             now = timezone.now()
-            
             if subscription.status == 'active' and subscription.end_date <= now:
                 subscription.status = 'expired'
                 subscription.save(update_fields=['status'])
                 
-                # Обновляем is_premium пользователя
-                request.user.is_premium = False
-                request.user.save(update_fields=['is_premium'])
-                
-                logger.info(f"⏰ Подписка истекла для {request.user.phone_number}")
+                # Сбрасываем is_premium при истечении
+                user.is_premium = False
+                user.save(update_fields=['is_premium'])
             
-            # Проверяем соответствие is_premium
-            is_premium = (
-                subscription.status == 'active' and 
-                subscription.plan.plan_type != 'free'
-            )
+            # Возвращаем данные
+            is_premium = user.is_premium
             
-            if request.user.is_premium != is_premium:
-                request.user.is_premium = is_premium
-                request.user.save(update_fields=['is_premium'])
-                logger.info(f"🔄 is_premium обновлен для {request.user.phone_number}: {is_premium}")
-            
-            # Возвращаем единую структуру
             return Response({
                 'id': subscription.id,
                 'plan': SubscriptionPlanSerializer(subscription.plan).data,
                 'status': subscription.status,
                 'is_premium': is_premium,
-                'days_remaining': max(0, (subscription.end_date - now).days) if subscription.status == 'active' else 0,
+                'days_remaining': max(0, (subscription.end_date - now).days) if is_premium else 0,
                 'end_date': subscription.end_date.isoformat(),
                 'payment_period': subscription.payment_period,
                 'auto_renew': subscription.auto_renew,
             })
                 
         except UserSubscription.DoesNotExist:
-            # Нет подписки = Free план
-            if request.user.is_premium:
-                request.user.is_premium = False
-                request.user.save(update_fields=['is_premium'])
-            
+            # Нет подписки = Free
             return Response({
                 'id': None,
                 'plan': {'plan_type': 'free', 'name': 'Free'},
                 'status': 'free',
-                'is_premium': False,
+                'is_premium': user.is_premium,
                 'days_remaining': 0,
                 'end_date': None,
                 'payment_period': None,
                 'auto_renew': False,
             })
-        except Exception as e:
-            logger.error(f"❌ Ошибка проверки подписки: {e}", exc_info=True)
-            return Response(
-                {'error': 'Ошибка проверки подписки'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
 
     @extend_schema(
         description="Оформить подписку",
@@ -221,6 +201,10 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
         subscription.status = 'active'
         subscription.save(update_fields=['status'])
         
+        # ✅ Обновляем is_premium при успешном платеже
+        request.user.is_premium = True
+        request.user.save(update_fields=['is_premium'])
+        
         return Response({
             'detail': 'Payment successful',
             'payment': self.get_serializer(payment).data,
@@ -243,12 +227,7 @@ class ActivationCodeViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def activate(self, request):
         """
-        ✅ ИСПРАВЛЕННАЯ АКТИВАЦИЯ КОДА
-        
-        1. Проверяет валидность кода
-        2. Создает/обновляет подписку
-        3. ✅ ОБНОВЛЯЕТ is_premium пользователя
-        4. Возвращает актуальные данные
+        ✅ АКТИВАЦИЯ КОДА С ОБНОВЛЕНИЕМ is_premium
         """
         code_str = request.data.get('code', '').strip().upper()
         
@@ -275,44 +254,32 @@ class ActivationCodeViewSet(viewsets.ViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # ✅ АКТИВИРУЕМ КОД
-            try:
-                subscription = activation_code.activate_for_user(request.user)
-                
-                # ✅ КРИТИЧНО: Обновляем is_premium
-                request.user.is_premium = True
-                request.user.save(update_fields=['is_premium'])
-                
-                # Перезагружаем данные
-                request.user.refresh_from_db()
-                subscription.refresh_from_db()
-                
-                logger.info(
-                    f"✅ Код {code_str} активирован для {request.user.phone_number}. "
-                    f"is_premium={request.user.is_premium}, подписка до {subscription.end_date}"
-                )
-                
-                return Response({
-                    'success': True,
-                    'message': f'Premium подписка активирована до {subscription.end_date.strftime("%d.%m.%Y")}',
-                    'user': {
-                        'is_premium': request.user.is_premium,
-                    },
-                    'subscription': {
-                        'id': subscription.id,
-                        'plan': subscription.plan.name,
-                        'status': subscription.status,
-                        'is_premium': True,
-                        'days_remaining': (subscription.end_date - timezone.now()).days,
-                        'end_date': subscription.end_date.isoformat(),
-                    }
-                }, status=status.HTTP_200_OK)
-                
-            except ValueError as e:
-                return Response(
-                    {'success': False, 'error': str(e)},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # ✅ АКТИВИРУЕМ КОД (это автоматически обновит is_premium в модели)
+            subscription = activation_code.activate_for_user(request.user)
+            
+            # Перезагружаем пользователя
+            request.user.refresh_from_db()
+            
+            logger.info(
+                f"✅ Код {code_str} активирован для {request.user.phone_number}. "
+                f"is_premium={request.user.is_premium}"
+            )
+            
+            return Response({
+                'success': True,
+                'message': f'Premium подписка активирована до {subscription.end_date.strftime("%d.%m.%Y")}',
+                'user': {
+                    'is_premium': request.user.is_premium,
+                },
+                'subscription': {
+                    'id': subscription.id,
+                    'plan': subscription.plan.name,
+                    'status': subscription.status,
+                    'is_premium': request.user.is_premium,
+                    'days_remaining': (subscription.end_date - timezone.now()).days,
+                    'end_date': subscription.end_date.isoformat(),
+                }
+            }, status=status.HTTP_200_OK)
             
         except ActivationCode.DoesNotExist:
             return Response(

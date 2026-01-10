@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import SMSVerification, UserDevice
@@ -169,7 +169,8 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
-    parser_classes = (MultiPartParser, FormParser)
+    # ✅ ИСПРАВЛЕНО: Поддержка JSON и Multipart
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_queryset(self):
         return User.objects.filter(id=self.request.user.id)
