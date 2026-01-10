@@ -7,7 +7,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('accounts', '0001_initial'),
-        ('auth', '0016_remove_user_phone_number'),
     ]
 
     operations = [
