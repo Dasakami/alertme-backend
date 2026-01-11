@@ -5,14 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.utils import timezone
 from django.db import transaction
-from django.core.files.uploadedfile import InMemoryUploadedFile
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from .models import SOSAlert, ActivityTimer, SOSNotification
 from .serializers import (SOSAlertSerializer, ActivityTimerSerializer, 
                          SOSAlertCreateSerializer, SOSStatusUpdateSerializer)
 from .tasks import send_sos_notifications, process_sos_media
 from contacts.models import EmergencyContact
-
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,8 +24,6 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
     serializer_class = SOSAlertSerializer
     permission_classes = [IsAuthenticated]
     queryset = SOSAlert.objects.none()
-    
-    # ✅ ВАЖНО: Поддержка multipart для загрузки файлов
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
@@ -44,99 +40,59 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        """✅ ИСПРАВЛЕНО: Создание SOS с правильной обработкой файлов для Cloudinary"""
+        """✅ ОПТИМИЗИРОВАНО: Один вызов save() с файлами"""
         
         logger.info(f"📥 Получен запрос на создание SOS")
-        logger.info(f"📋 Data: {request.data}")
-        logger.info(f"📎 Files: {request.FILES}")
         
-        # ✅ ИСПРАВЛЕНИЕ: Извлекаем файлы ДО создания сериализатора
+        # Извлекаем файлы
         audio_file = request.FILES.get('audio_file')
         video_file = request.FILES.get('video_file')
         
         if audio_file:
-            logger.info(f"🎤 Получен аудио файл: {audio_file.name}, размер: {audio_file.size / 1024:.2f} KB")
-            # ✅ КРИТИЧНО: Перематываем файл в начало
-            if hasattr(audio_file, 'seek'):
-                audio_file.seek(0)
-        
+            logger.info(f"🎤 Аудио: {audio_file.name}, {audio_file.size / 1024:.2f} KB")
         if video_file:
-            logger.info(f"🎬 Получен видео файл: {video_file.name}, размер: {video_file.size / 1024:.2f} KB")
-            # ✅ КРИТИЧНО: Перематываем файл в начало
-            if hasattr(video_file, 'seek'):
-                video_file.seek(0)
+            logger.info(f"🎬 Видео: {video_file.name}, {video_file.size / 1024:.2f} KB")
         
-        # Создаем копию данных БЕЗ файлов для сериализатора
-        data = request.data.copy()
-        if 'audio_file' in data:
-            del data['audio_file']
-        if 'video_file' in data:
-            del data['video_file']
-        
-        # Создаем SOS БЕЗ файлов
-        serializer = self.get_serializer(data=data)
+        # Валидация данных (файлы остаются в request.data)
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        sos_alert = serializer.save(user=request.user)
-        logger.info(f"✅ SOS создан с ID: {sos_alert.id}")
-        
-        # ✅ ИСПРАВЛЕНИЕ: Сохраняем файлы ОТДЕЛЬНО после создания объекта
+        # ✅ Сохраняем всё за один раз - Django автоматически загрузит в Cloudinary
         try:
-            if audio_file:
-                # Перематываем в начало перед сохранением
-                audio_file.seek(0)
-                
-                # Сохраняем файл напрямую в поле
-                sos_alert.audio_file.save(
-                    audio_file.name,
-                    audio_file,
-                    save=True  # ✅ ВАЖНО: save=True сохранит объект
-                )
-                logger.info(f"✅ Аудио сохранено в Cloudinary: {sos_alert.audio_file.url}")
+            sos_alert = serializer.save(user=request.user)
+            logger.info(f"✅ SOS создан с ID: {sos_alert.id}")
             
-            if video_file:
-                # Перематываем в начало перед сохранением
-                video_file.seek(0)
-                
-                # Сохраняем файл напрямую в поле
-                sos_alert.video_file.save(
-                    video_file.name,
-                    video_file,
-                    save=True  # ✅ ВАЖНО: save=True сохранит объект
-                )
-                logger.info(f"✅ Видео сохранено в Cloudinary: {sos_alert.video_file.url}")
+            if sos_alert.audio_file:
+                logger.info(f"✅ Аудио в Cloudinary: {sos_alert.audio_file.url}")
+            if sos_alert.video_file:
+                logger.info(f"✅ Видео в Cloudinary: {sos_alert.video_file.url}")
                 
         except Exception as e:
-            logger.error(f"❌ Ошибка загрузки файла в Cloudinary: {e}", exc_info=True)
-            # Удаляем SOS если загрузка не удалась
-            sos_alert.delete()
+            logger.error(f"❌ Ошибка создания SOS: {e}", exc_info=True)
             return Response(
-                {'error': f'Ошибка загрузки медиа файла: {str(e)}'},
+                {'error': f'Ошибка загрузки: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
         # Получаем контакты
-        contacts = EmergencyContact.objects.filter(
-            user=request.user,
-            is_active=True
-        )
+        contacts = EmergencyContact.objects.filter(user=request.user, is_active=True)
         
         if not contacts.exists():
-            logger.warning(f"⚠️ У пользователя {request.user.phone_number} нет контактов")
+            logger.warning(f"⚠️ Нет контактов у {request.user.phone_number}")
             return Response(
                 {'error': 'No emergency contacts configured'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         contact_ids = list(contacts.values_list('id', flat=True))
-        logger.info(f"📨 Отправка уведомлений на {len(contact_ids)} контактов")
+        logger.info(f"📨 Отправка на {len(contact_ids)} контактов")
         
         # Отправляем уведомления
         try:
             send_sos_notifications(sos_alert.id, contact_ids)
-            logger.info("✅ SOS уведомления отправлены")
+            logger.info("✅ Уведомления отправлены")
         except Exception as e:
-            logger.error(f"❌ Ошибка отправки уведомлений: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка уведомлений: {e}", exc_info=True)
         
         # Обработка медиа
         if sos_alert.audio_file or sos_alert.video_file:
@@ -146,14 +102,12 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 logger.error(f"❌ Ошибка обработки медиа: {e}", exc_info=True)
         
-        # Возвращаем полный объект
-        headers = self.get_success_headers(serializer.data)
+        # Возвращаем результат
         response_serializer = SOSAlertSerializer(sos_alert)
-        
         return Response(
             response_serializer.data,
             status=status.HTTP_201_CREATED,
-            headers=headers
+            headers=self.get_success_headers(response_serializer.data)
         )
 
     @action(detail=True, methods=['post'])
