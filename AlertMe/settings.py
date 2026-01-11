@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = config('SECRET_KEY', default='your-secret-key-change-in-production')
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,10.168.136.53,127.0.0.1,192.168.68.219,10.122.0.53,10.231.17.53,alertme-ihww.onrender.com,alertme-backend.vercel.app').split(',')
+ALLOWED_HOSTS = ['*', '.vercel.app', 'alertme-ihww.onrender.com']
 CORS_ALLOW_ALL_ORIGINS = True 
 INSTALLED_APPS = [
     'daphne',
@@ -54,7 +54,7 @@ ROOT_URLCONF = 'AlertMe.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR/'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
