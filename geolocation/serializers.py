@@ -85,7 +85,7 @@ class SharedLocationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'share_token', 'start_time', 'end_time',
                            'created_at']
     
-    @extend_schema_field(serializers.CharField)  # ИСПРАВЛЕНО
+    @extend_schema_field(serializers.CharField)
     def get_share_url(self, obj) -> str:
         request = self.context.get('request')
         if request:
@@ -94,7 +94,7 @@ class SharedLocationSerializer(serializers.ModelSerializer):
             )
         return ''
     
-    @extend_schema_field(serializers.IntegerField)  # ИСПРАВЛЕНО
+    @extend_schema_field(serializers.IntegerField) 
     def get_time_remaining(self, obj) -> int:
         if obj.status == 'active':
             from django.utils import timezone

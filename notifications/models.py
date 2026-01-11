@@ -1,16 +1,8 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
-from datetime import timedelta
-
 
 class TelegramUser(models.Model):
-    """
-    Связь между пользователями приложения и Telegram
-    
-    Заполняется когда пользователь пишет /start боту
-    """
-    # Связь с пользователем приложения (опционально)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -18,14 +10,10 @@ class TelegramUser(models.Model):
         blank=True,
         related_name='telegram_profile'
     )
-    
-    # Telegram данные
     chat_id = models.BigIntegerField(unique=True, db_index=True)
     username = models.CharField(max_length=255, null=True, blank=True, db_index=True)
     first_name = models.CharField(max_length=255, null=True, blank=True)
     last_name = models.CharField(max_length=255, null=True, blank=True)
-    
-    # Для контактов (когда добавляют username контакта)
     phone_number = models.CharField(max_length=20, null=True, blank=True)
     
     is_active = models.BooleanField(default=True)
@@ -41,10 +29,6 @@ class TelegramUser(models.Model):
 
 
 class MediaAccessToken(models.Model):
-    """
-    Токен доступа для просмотра медиа файлов SOS
-    (опциональная безопасность)
-    """
     token = models.CharField(max_length=255, unique=True, db_index=True)
     sos_alert = models.ForeignKey(
         'sos.SOSAlert',
@@ -73,14 +57,10 @@ class MediaAccessToken(models.Model):
         return f"{self.token[:10]}... for SOS {self.sos_alert_id}"
     
     def is_valid(self) -> bool:
-        """Проверяет валидность токена"""
         return self.expires_at > timezone.now()
 
 
 class SOSMediaLog(models.Model):
-    """
-    Логирование медиа файлов SOS для аналитики и безопасности
-    """
     sos_alert = models.ForeignKey(
         'sos.SOSAlert',
         on_delete=models.CASCADE,
@@ -94,7 +74,7 @@ class SOSMediaLog(models.Model):
     
     media_type = models.CharField(max_length=10, choices=MEDIA_TYPE_CHOICES)
     file_path = models.CharField(max_length=500)
-    file_size = models.IntegerField()  # в байтах
+    file_size = models.IntegerField()  
     duration_seconds = models.IntegerField(null=True, blank=True)
     
     upload_status = models.CharField(

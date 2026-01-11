@@ -49,13 +49,9 @@ class Geozone(models.Model):
     name = models.CharField(max_length=255, verbose_name=_('Zone Name'))
     description = models.TextField(blank=True)
     zone_type = models.CharField(max_length=20, choices=ZONE_TYPE_CHOICES, default='safe')
-    
-    # Center point
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     radius = models.FloatField(help_text=_('Radius in meters'))
-    
-    # Polygon coordinates (optional, for complex shapes)
     polygon_coordinates = models.JSONField(null=True, blank=True, 
                                           help_text=_('Array of [lat, lng] coordinates'))
     

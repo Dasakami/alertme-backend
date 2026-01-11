@@ -98,8 +98,8 @@ class SendSMSSerializer(serializers.Serializer):
             expires_at=expires_at
         )
         
-        print(f"✅ ТЕСТОВЫЙ КОД для {phone_number}: {code}")
-        print(f"⏰ Истекает: {expires_at}")
+        print(f" ТЕСТОВЫЙ КОД для {phone_number}: {code}")
+        print(f" Истекает: {expires_at}")
         
         return sms_verification
 
@@ -127,8 +127,6 @@ class VerifySMSSerializer(serializers.Serializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Сериализатор профиля пользователя"""
-    
     class Meta:
         model = User
         fields = [

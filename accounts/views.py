@@ -6,12 +6,11 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.contrib.auth import get_user_model, authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
-from .models import SMSVerification, UserDevice
+from .models import UserDevice
 from .serializers import (
     UserRegistrationSerializer, SendSMSSerializer, VerifySMSSerializer,
     UserSerializer, UserDeviceSerializer
 )
-from .tasks import send_verification_sms
 import logging
 
 logger = logging.getLogger(__name__)
@@ -161,15 +160,8 @@ class CustomTokenObtainView(APIView):
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):
-    """
-    ГЛАВНЫЙ API ДЛЯ РАБОТЫ С ПРОФИЛЕМ
-    
-    GET /api/users/me/ - получить данные текущего пользователя
-    PUT/PATCH /api/users/update-profile/ - обновить профиль
-    """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
-    # ✅ ИСПРАВЛЕНО: Поддержка JSON и Multipart
     parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_queryset(self):
@@ -177,30 +169,17 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def me(self, request):
-        """
-        ✅ ЕДИНАЯ ТОЧКА для получения данных пользователя
-        
-        Возвращает:
-        - Все данные профиля
-        - Premium статус (is_premium)
-        - Telegram username
-        - Аватар и т.д.
-        """
         user = request.user
-        
-        # Обновляем is_premium из подписки
         try:
             from subscriptions.models import UserSubscription
             from django.utils import timezone
             
             subscription = UserSubscription.objects.select_related('plan').get(user=user)
             
-            # Проверяем не истекла ли подписка
             if subscription.status == 'active' and subscription.end_date <= timezone.now():
                 subscription.status = 'expired'
                 subscription.save(update_fields=['status'])
             
-            # Обновляем is_premium
             user.is_premium = (
                 subscription.status == 'active' and 
                 subscription.plan.plan_type != 'free'
@@ -208,7 +187,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
             user.save(update_fields=['is_premium'])
             
         except UserSubscription.DoesNotExist:
-            # Нет подписки = не премиум
             if user.is_premium:
                 user.is_premium = False
                 user.save(update_fields=['is_premium'])
@@ -218,16 +196,6 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['put', 'patch'])
     def update_profile(self, request):
-        """
-        ✅ ОБНОВЛЕНИЕ ПРОФИЛЯ
-        
-        Принимает:
-        - first_name
-        - last_name
-        - email
-        - telegram_username
-        - language
-        """
         user = request.user
         serializer = self.get_serializer(
             user,

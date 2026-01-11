@@ -1,4 +1,3 @@
-import os
 import logging
 from django.conf import settings
 from typing import Optional, Dict, Any
@@ -8,14 +7,6 @@ logger = logging.getLogger(__name__)
 
 
 class NotificationService:
-    """
-    Универсальная система уведомлений с Twilio и Telegram fallback
-    
-    Логика работы:
-    1. Если TWILIO настроен - используем Twilio (продакшн)
-    2. Если TWILIO не настроен - используем Telegram бота (MVP/демо)
-    """
-    
     def __init__(self):
         self.twilio_enabled = self._check_twilio()
         self.telegram_enabled = self._check_telegram()
@@ -26,14 +17,13 @@ class NotificationService:
                 settings.TWILIO_ACCOUNT_SID,
                 settings.TWILIO_AUTH_TOKEN
             )
-            logger.info("✅ Twilio включен (продакшн режим)")
+            logger.info(" Twilio включен (продакшн режим)")
         elif self.telegram_enabled:
-            logger.info("✅ Telegram fallback включен (MVP режим)")
+            logger.info(" Telegram fallback включен (MVP режим)")
         else:
             logger.warning("⚠️ Нет настроенных сервисов уведомлений")
     
     def _check_twilio(self) -> bool:
-        """Проверка настроек Twilio"""
         return all([
             getattr(settings, 'TWILIO_ACCOUNT_SID', None),
             getattr(settings, 'TWILIO_AUTH_TOKEN', None),
@@ -53,22 +43,9 @@ class NotificationService:
         address: Optional[str] = None,
         telegram_username: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Отправка экстренного SOS уведомления
-        
-        Args:
-            to_phone: Номер телефона контакта
-            user_name: Имя пользователя активировавшего SOS
-            latitude: Широта
-            longitude: Долгота
-            address: Адрес (опционально)
-            telegram_username: Username контакта в Telegram (для fallback)
-        """
         message = self._format_sos_message(
             user_name, latitude, longitude, address
         )
-        
-        # Приоритет 1: Twilio SMS
         if self.twilio_enabled:
             try:
                 sms = self.twilio_client.messages.create(
@@ -77,16 +54,14 @@ class NotificationService:
                     to=to_phone
                 )
                 
-                logger.info(f"✅ SOS отправлено через Twilio: {to_phone}")
+                logger.info(f" SOS отправлено через Twilio: {to_phone}")
                 return {
                     'success': True,
                     'method': 'twilio',
                     'message_id': sms.sid,
                 }
             except Exception as e:
-                logger.error(f"❌ Ошибка Twilio: {e}")
-        
-        # Приоритет 2: Telegram
+                logger.error(f" Ошибка Twilio: {e}")
         if self.telegram_enabled and telegram_username:
             result = self._send_telegram_sos(
                 telegram_username,
@@ -97,11 +72,9 @@ class NotificationService:
             )
             
             if result['success']:
-                logger.info(f"✅ SOS отправлено в Telegram: @{telegram_username}")
+                logger.info(f" SOS отправлено в Telegram: @{telegram_username}")
                 return result
-        
-        # Не удалось отправить
-        logger.error(f"❌ Не удалось отправить SOS уведомление")
+        logger.error(f" Не удалось отправить SOS уведомление")
         return {
             'success': False,
             'method': 'failed',
@@ -116,9 +89,7 @@ class NotificationService:
         longitude: float,
         address: Optional[str] = None
     ) -> Dict[str, Any]:
-        """Отправка SOS через Telegram с красивым форматированием"""
         try:
-            # Получаем chat_id по username
             chat_id = self._get_chat_id_by_username(username)
             
             if not chat_id:
@@ -127,14 +98,12 @@ class NotificationService:
                     'error': f'Пользователь @{username} не найден. '
                              'Попросите его написать /start боту.'
                 }
-            
-            # Google Maps ссылка
+        
             google_maps_url = (
                 f"https://www.google.com/maps/search/?api=1"
                 f"&query={latitude},{longitude}"
             )
             
-            # Форматируем сообщение
             from datetime import datetime
             message = (
                 "🚨 <b>ЭКСТРЕННАЯ ТРЕВОГА!</b>\n\n"
@@ -151,7 +120,6 @@ class NotificationService:
                 f"❗ Это автоматическое уведомление из приложения AlertMe"
             )
             
-            # Отправляем сообщение
             url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendMessage"
             
             response = requests.post(url, json={
@@ -183,31 +151,20 @@ class NotificationService:
             }
     
     def _get_chat_id_by_username(self, username: str) -> Optional[int]:
-        """
-        Получить chat_id по username из базы данных
-        
-        Пользователь должен был написать /start боту
-        """
         from django.core.cache import cache
         from notifications.models import TelegramUser
-        
-        # Убираем @ если есть
         username = username.lstrip('@')
-        
-        # Проверяем кэш
         cache_key = f'telegram_chat_id:{username}'
         chat_id = cache.get(cache_key)
         
         if chat_id:
             return chat_id
         
-        # Ищем в базе
         try:
             tg_user = TelegramUser.objects.get(
                 username__iexact=username,
                 is_active=True
             )
-            # Кэшируем на 1 час
             cache.set(cache_key, tg_user.chat_id, 3600)
             return tg_user.chat_id
         except TelegramUser.DoesNotExist:
@@ -224,7 +181,6 @@ class NotificationService:
         longitude: float,
         address: Optional[str] = None
     ) -> str:
-        """Форматирование SOS сообщения для SMS"""
         message = f"🚨 ЭКСТРЕННАЯ ТРЕВОГА!\n\n"
         message += f"{user_name} активировал SOS!\n\n"
         
@@ -250,9 +206,7 @@ class NotificationService:
         audio_path: str,
         caption: Optional[str] = None
     ) -> bool:
-        """Отправка аудио в Telegram"""
         try:
-            # Получаем chat_id по username
             chat_id = self._get_chat_id_by_username(telegram_username)
             
             if not chat_id:
@@ -261,8 +215,6 @@ class NotificationService:
                     f"Попросите его написать /start боту."
                 )
                 return False
-            
-            # Отправляем аудио
             import requests
             
             url = f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/sendAudio"
@@ -277,12 +229,12 @@ class NotificationService:
                 response = requests.post(url, files=files, data=data, timeout=30)
                 
                 if response.status_code == 200:
-                    logger.info(f"✅ Аудио отправлено @{telegram_username} (chat_id: {chat_id})")
+                    logger.info(f" Аудио отправлено @{telegram_username} (chat_id: {chat_id})")
                     return True
                 else:
-                    logger.error(f"❌ Ошибка Telegram API: {response.text}")
+                    logger.error(f" Ошибка Telegram API: {response.text}")
                     return False
                     
         except Exception as e:
-            logger.error(f"❌ Ошибка отправки аудио: {e}", exc_info=True)
+            logger.error(f" Ошибка отправки аудио: {e}", exc_info=True)
             return False

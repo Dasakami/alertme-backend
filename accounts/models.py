@@ -9,8 +9,6 @@ class CustomUserManager(BaseUserManager):
     def create_user(self, phone_number, password=None, **extra_fields):
         if not phone_number:
             raise ValueError(_('The Phone Number must be set'))
-        
-        # Автоматически генерируем username как UUID
         if 'username' not in extra_fields or not extra_fields.get('username'):
             extra_fields['username'] = str(uuid.uuid4())
         
@@ -33,15 +31,6 @@ class CustomUserManager(BaseUserManager):
 
 
 class User(AbstractUser):
-    """
-    Кастомная модель пользователя
-    
-    ГЛАВНОЕ ПОЛЕ: phone_number (для авторизации)
-    username: автоматически генерируется как UUID (не используется пользователем)
-    telegram_username: пользователь вводит сам в настройках для SOS уведомлений
-    """
-    
-    # Username существует (требование Django), но генерируется автоматически
     username = models.CharField(
         max_length=150, 
         unique=True, 
@@ -49,18 +38,12 @@ class User(AbstractUser):
         blank=True,
         help_text='Автоматически генерируется, не используется пользователем'
     )
-    
-    # ГЛАВНОЕ ПОЛЕ для авторизации
     phone_number = PhoneNumberField(
         unique=True, 
         verbose_name=_('Phone Number'),
         help_text='Формат: +996XXXXXXXXX'
     )
-    
-    # Опциональные поля
     email = models.EmailField(blank=True, null=True, verbose_name=_('Email'))
-    
-    # НОВОЕ: Telegram username для SOS уведомлений
     telegram_username = models.CharField(
         max_length=255,
         blank=True,
@@ -77,14 +60,11 @@ class User(AbstractUser):
         default='ru'
     )
     
-    # FCM токен для push уведомлений
     fcm_token = models.TextField(
         blank=True, 
         null=True, 
         verbose_name='Firebase Token'
     )
-    
-    # ПРЕМИУМ статус (денормализованное поле для быстрой проверки)
     is_premium = models.BooleanField(
         default=False,
         verbose_name='Is Premium',
@@ -93,8 +73,6 @@ class User(AbstractUser):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
-    # ✅ ИСПРАВЛЕНО: Переопределяем связи для избежания конфликтов
     groups = models.ManyToManyField(
         'auth.Group',
         verbose_name=_('groups'),
@@ -103,8 +81,8 @@ class User(AbstractUser):
             'The groups this user belongs to. A user will get all permissions '
             'granted to each of their groups.'
         ),
-        related_name='custom_user_set',  # ✅ ИЗМЕНЕНО
-        related_query_name='custom_user',  # ✅ ИЗМЕНЕНО
+        related_name='custom_user_set',  
+        related_query_name='custom_user',  
     )
     
     user_permissions = models.ManyToManyField(
@@ -112,11 +90,11 @@ class User(AbstractUser):
         verbose_name=_('user permissions'),
         blank=True,
         help_text=_('Specific permissions for this user.'),
-        related_name='custom_user_set',  # ✅ ИЗМЕНЕНО
-        related_query_name='custom_user',  # ✅ ИЗМЕНЕНО
+        related_name='custom_user_set',
+        related_query_name='custom_user', 
     )
     
-    # Поле для авторизации
+
     USERNAME_FIELD = 'phone_number'
     REQUIRED_FIELDS = []
     
@@ -130,7 +108,6 @@ class User(AbstractUser):
         return str(self.phone_number)
     
     def save(self, *args, **kwargs):
-        # Автоматически генерируем username если его нет
         if not self.username:
             self.username = str(uuid.uuid4())
         super().save(*args, **kwargs)

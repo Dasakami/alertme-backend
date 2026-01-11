@@ -15,7 +15,6 @@ def send_verification_sms(sms_verification_id):
         phone = str(sms_verification.phone_number)
         code = sms_verification.code
         
-        # Используем SMS сервис
         sms_service = SMSService()
         
         message = f"Ваш код подтверждения AlertMe: {code}\nДействителен 10 минут"
@@ -26,17 +25,17 @@ def send_verification_sms(sms_verification_id):
         )
         
         if success:
-            logger.info(f"✅ Код подтверждения отправлен на {phone}")
+            logger.info(f" Код подтверждения отправлен на {phone}")
             return True
         else:
-            logger.error(f"❌ Не удалось отправить SMS на {phone}")
+            logger.error(f" Не удалось отправить SMS на {phone}")
             return False
             
     except SMSVerification.DoesNotExist:
-        logger.error(f"❌ SMSVerification с ID {sms_verification_id} не найдена")
+        logger.error(f" SMSVerification с ID {sms_verification_id} не найдена")
         return False
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки SMS: {e}", exc_info=True)
+        logger.error(f" Ошибка отправки SMS: {e}", exc_info=True)
         return False
 
 
@@ -49,4 +48,4 @@ def cleanup_expired_verifications():
         is_verified=False
     ).delete()
     
-    logger.info(f"✅ Удалено {expired_count} истекших кодов подтверждения")
+    logger.info(f" Удалено {expired_count} истекших кодов подтверждения")

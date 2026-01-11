@@ -47,29 +47,20 @@ router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'activation-codes', ActivationCodeViewSet, basename='activation-code')
 
 urlpatterns = [
-    # API Docs
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     path('docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     
-    # ✅ AUTH endpoints (без префикса /auth/)
     path('auth/register/', UserRegistrationView.as_view(), name='register'),
     path('auth/send-sms/', SendSMSVerificationView.as_view(), name='send-sms'),
     path('auth/verify-sms/', VerifySMSView.as_view(), name='verify-sms'),
     path('auth/login/', CustomTokenObtainView.as_view(), name='login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
-    # ✅ ВАЖНО: Эти маршруты ДОЛЖНЫ быть ДО router.urls
-    # Иначе router перехватит их первым
+
     path('users/me/', UserProfileViewSet.as_view({'get': 'me'}), name='user-me'),
     path('users/update-profile/', UserProfileViewSet.as_view({
         'patch': 'update_profile', 
         'put': 'update_profile'
     }), name='user-update-profile'),
-    
-    # Router endpoints (последними!)
-    path('', include(router.urls)),
-    
-    # Media preview
     path('media/sos/<int:sos_id>/', media_preview, name='media_preview'),
 ]
 

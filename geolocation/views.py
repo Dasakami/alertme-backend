@@ -17,8 +17,6 @@ class LocationHistoryViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = LocationHistory.objects.filter(user=self.request.user)
-        
-        # Filter by date range
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         
@@ -31,13 +29,10 @@ class LocationHistoryViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         location = serializer.save(user=self.request.user)
-        
-        # Check geozones after saving location
         check_geozone_events(self.request.user.id, location.id)
 
     @action(detail=False, methods=['get'])
     def current(self, request):
-        """Get most recent location"""
         location = LocationHistory.objects.filter(
             user=request.user
         ).order_by('-timestamp').first()
@@ -53,7 +48,6 @@ class LocationHistoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def track(self, request):
-        """Get location track for the last N hours"""
         hours = int(request.query_params.get('hours', 24))
         since = timezone.now() - timedelta(hours=hours)
         
@@ -78,13 +72,10 @@ class GeozoneViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def events(self, request, pk=None):
-        """Get events for this geozone"""
         geozone = self.get_object()
         events = GeozoneEvent.objects.filter(
             geozone=geozone
         ).order_by('-timestamp')
-        
-        # Pagination
         page = self.paginate_queryset(events)
         if page is not None:
             serializer = GeozoneEventSerializer(page, many=True)
@@ -102,7 +93,6 @@ class SharedLocationViewSet(viewsets.ModelViewSet):
         return SharedLocation.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        # Generate unique share token
         share_token = secrets.token_urlsafe(32)
         
         duration = serializer.validated_data['duration_minutes']
@@ -125,7 +115,6 @@ class SharedLocationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
     def track_by_token(self, request):
-        """Track shared location by token (no auth required)"""
         token = request.query_params.get('token')
         
         if not token:
@@ -145,8 +134,6 @@ class SharedLocationViewSet(viewsets.ModelViewSet):
                 {'error': 'Invalid or expired token'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
-        # Get recent locations
         locations = LocationHistory.objects.filter(
             user=shared_location.user,
             timestamp__gte=shared_location.start_time

@@ -1,4 +1,3 @@
-# subscriptions/views.py - УПРОЩЕННАЯ И ИСПРАВЛЕННАЯ ВЕРСИЯ
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -48,34 +47,24 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
         return UserSubscription.objects.filter(user=self.request.user)
 
     @extend_schema(
-        description="✅ Получить информацию о подписке (упрощенный вариант)",
+        description=" Получить информацию о подписке (упрощенный вариант)",
         responses={200: dict}
     )
     @action(detail=False, methods=['get'])
     def current(self, request):
-        """
-        ✅ УПРОЩЕННАЯ ПРОВЕРКА ПОДПИСКИ
-        
-        Больше НЕ обновляет is_premium (это делается только при активации кода)
-        Просто возвращает актуальные данные
-        """
         user = request.user
         
-        # ✅ Просто возвращаем текущий статус
         try:
             subscription = UserSubscription.objects.select_related('plan').get(user=user)
             
-            # Проверяем не истекла ли подписка
             now = timezone.now()
             if subscription.status == 'active' and subscription.end_date <= now:
                 subscription.status = 'expired'
                 subscription.save(update_fields=['status'])
                 
-                # Сбрасываем is_premium при истечении
                 user.is_premium = False
                 user.save(update_fields=['is_premium'])
             
-            # Возвращаем данные
             is_premium = user.is_premium
             
             return Response({
@@ -90,7 +79,6 @@ class UserSubscriptionViewSet(viewsets.ModelViewSet):
             })
                 
         except UserSubscription.DoesNotExist:
-            # Нет подписки = Free
             return Response({
                 'id': None,
                 'plan': {'plan_type': 'free', 'name': 'Free'},
@@ -201,7 +189,6 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
         subscription.status = 'active'
         subscription.save(update_fields=['status'])
         
-        # ✅ Обновляем is_premium при успешном платеже
         request.user.is_premium = True
         request.user.save(update_fields=['is_premium'])
         
@@ -214,7 +201,7 @@ class PaymentViewSet(viewsets.ReadOnlyModelViewSet):
 
 @extend_schema_view(
     activate=extend_schema(
-        description="✅ Активировать код подписки",
+        description=" Активировать код подписки",
         request={'application/json': {'type': 'object', 'properties': {'code': {'type': 'string'}}}},
         responses={200: dict, 400: dict, 404: dict}
     ),
@@ -226,9 +213,6 @@ class ActivationCodeViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['post'])
     def activate(self, request):
-        """
-        ✅ АКТИВАЦИЯ КОДА С ОБНОВЛЕНИЕМ is_premium
-        """
         code_str = request.data.get('code', '').strip().upper()
         
         if not code_str:
@@ -240,7 +224,6 @@ class ActivationCodeViewSet(viewsets.ViewSet):
         try:
             activation_code = ActivationCode.objects.select_related('plan').get(code=code_str)
             
-            # Проверка валидности
             if not activation_code.is_valid():
                 if activation_code.is_used:
                     error = 'Код уже использован'
@@ -253,15 +236,12 @@ class ActivationCodeViewSet(viewsets.ViewSet):
                     {'success': False, 'error': error},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # ✅ АКТИВИРУЕМ КОД (это автоматически обновит is_premium в модели)
             subscription = activation_code.activate_for_user(request.user)
             
-            # Перезагружаем пользователя
             request.user.refresh_from_db()
             
             logger.info(
-                f"✅ Код {code_str} активирован для {request.user.phone_number}. "
+                f" Код {code_str} активирован для {request.user.phone_number}. "
                 f"is_premium={request.user.is_premium}"
             )
             

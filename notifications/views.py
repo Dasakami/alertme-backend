@@ -1,14 +1,11 @@
-# notifications/views.py
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse
 from sos.models import SOSAlert
 
 
 def media_preview(request, sos_id):
-    """✅ ИСПРАВЛЕНО: Показ медиа для SOS сигнала"""
     sos = get_object_or_404(SOSAlert, id=sos_id)
 
-    # Получаем URL для медиа файлов
     audio_url = None
     video_url = None
     
@@ -23,11 +20,6 @@ def media_preview(request, sos_id):
             video_url = sos.video_file.url
         except:
             pass
-
-    # ✅ ПРОСТОЙ HTML БЕЗ ШАБЛОНА (если шаблон не нужен)
-    # Можно использовать встроенный HTML или шаблон
-    
-    # ВАРИАНТ 1: Без шаблона (встроенный HTML)
     html = f"""
 <!DOCTYPE html>
 <html lang="ru">
@@ -237,20 +229,3 @@ def media_preview(request, sos_id):
     """
     
     return HttpResponse(html, content_type='text/html')
-
-
-# ВАРИАНТ 2: С шаблоном (если хотите использовать)
-# Раскомментируйте если создадите шаблон
-"""
-def media_preview(request, sos_id):
-    sos = get_object_or_404(SOSAlert, id=sos_id)
-    
-    audio_url = sos.audio_file.url if sos.audio_file else None
-    video_url = sos.video_file.url if sos.video_file else None
-    
-    return render(request, 'notifications/media_preview.html', {
-        'sos': sos,
-        'audio_url': audio_url,
-        'video_url': video_url,
-    })
-"""

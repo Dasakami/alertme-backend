@@ -29,11 +29,7 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
-        # Create SOS alert
         sos_alert = serializer.save(user=request.user)
-        
-        # Get emergency contacts
         contacts = EmergencyContact.objects.filter(
             user=request.user,
             is_active=True
@@ -44,11 +40,8 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
                 {'error': 'No emergency contacts configured'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Trigger notifications
         send_sos_notifications(sos_alert.id, list(contacts.values_list('id', flat=True)))
         
-        # Process media files if provided
         if sos_alert.audio_file or sos_alert.video_file:
             process_sos_media(sos_alert.id)
         

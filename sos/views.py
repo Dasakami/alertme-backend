@@ -6,7 +6,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.utils import timezone
 from django.db import transaction
 from drf_spectacular.utils import extend_schema, extend_schema_view
-from .models import SOSAlert, ActivityTimer, SOSNotification
+from .models import SOSAlert, ActivityTimer
 from .serializers import (SOSAlertSerializer, ActivityTimerSerializer, 
                          SOSAlertCreateSerializer, SOSStatusUpdateSerializer)
 from contacts.models import EmergencyContact
@@ -17,23 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 def process_sos_async(sos_alert_id, contact_ids):
-    """Фоновая обработка SOS: уведомления + медиа"""
     from .tasks import send_sos_notifications, process_sos_media
     from .models import SOSAlert
     
     try:
-        # Отправляем уведомления
         send_sos_notifications(sos_alert_id, contact_ids)
-        logger.info(f"✅ Уведомления отправлены для SOS {sos_alert_id}")
+        logger.info(f" Уведомления отправлены для SOS {sos_alert_id}")
         
-        # Обработка медиа
         sos_alert = SOSAlert.objects.get(id=sos_alert_id)
         if sos_alert.audio_file or sos_alert.video_file:
             process_sos_media(sos_alert_id)
-            logger.info(f"✅ Медиа обработаны для SOS {sos_alert_id}")
+            logger.info(f" Медиа обработаны для SOS {sos_alert_id}")
             
     except Exception as e:
-        logger.error(f"❌ Ошибка фоновой обработки SOS {sos_alert_id}: {e}", exc_info=True)
+        logger.error(f" Ошибка фоновой обработки SOS {sos_alert_id}: {e}", exc_info=True)
 
 
 @extend_schema_view(
@@ -60,7 +57,6 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        """✅ БЫСТРЫЙ ОТВЕТ: Создаем SOS и сразу возвращаем, обработка в фоне"""
         
         logger.info(f"📥 Получен запрос на создание SOS")
         
@@ -72,37 +68,32 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
         if video_file:
             logger.info(f"🎬 Видео: {video_file.name}, {video_file.size / 1024:.2f} KB")
         
-        # Валидация
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # ✅ Создаем SOS - загрузка в Cloudinary происходит здесь
         try:
             sos_alert = serializer.save(user=request.user)
-            logger.info(f"✅ SOS создан с ID: {sos_alert.id}")
+            logger.info(f" SOS создан с ID: {sos_alert.id}")
             
             if sos_alert.audio_file:
-                logger.info(f"✅ Аудио загружено: {sos_alert.audio_file.url}")
+                logger.info(f" Аудио загружено: {sos_alert.audio_file.url}")
             if sos_alert.video_file:
-                logger.info(f"✅ Видео загружено: {sos_alert.video_file.url}")
+                logger.info(f" Видео загружено: {sos_alert.video_file.url}")
                 
         except Exception as e:
-            logger.error(f"❌ Ошибка создания SOS: {e}", exc_info=True)
+            logger.error(f" Ошибка создания SOS: {e}", exc_info=True)
             return Response(
                 {'error': f'Ошибка загрузки: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # Проверяем наличие контактов
         contacts = EmergencyContact.objects.filter(user=request.user, is_active=True)
         
         if not contacts.exists():
             logger.warning(f"⚠️ Нет контактов у {request.user.phone_number}")
-            # Но всё равно создаем SOS - контакты могут добавить позже
         
         contact_ids = list(contacts.values_list('id', flat=True))
         
-        # ✅ КРИТИЧНО: Запускаем обработку В ФОНЕ, не ждем результата
         if contact_ids:
             thread = threading.Thread(
                 target=process_sos_async,
@@ -112,7 +103,6 @@ class SOSAlertViewSet(viewsets.ModelViewSet):
             thread.start()
             logger.info(f"🚀 Фоновая обработка запущена для SOS {sos_alert.id}")
         
-        # ✅ СРАЗУ возвращаем ответ клиенту (не ждем уведомлений!)
         response_serializer = SOSAlertSerializer(sos_alert)
         return Response(
             response_serializer.data,

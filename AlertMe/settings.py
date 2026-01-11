@@ -25,10 +25,8 @@ INSTALLED_APPS = [
     'django_redis',
     'drf_spectacular',
     'channels',
-    # ✅ Cloudinary для хранения медиа
     'cloudinary_storage',
     'cloudinary',
-    # Apps
     'accounts',
     'sos',
     'contacts',
@@ -70,7 +68,6 @@ TEMPLATES = [
 WSGI_APPLICATION = 'AlertMe.wsgi.application'
 ASGI_APPLICATION = 'AlertMe.asgi.application'
 
-# Database
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -85,7 +82,6 @@ CACHES = {
     }
 }
 
-# ✅ Email настройки
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 465
@@ -96,13 +92,11 @@ DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='AlertMe <kilin6786@gm
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': 'dan9pfqk1',  # <--- нижний регистр
+    'CLOUD_NAME': 'dan9pfqk1', 
     'API_KEY': '127738592126977',
-    'API_SECRET': 'uVA4Atu__utlqWO1ehZhIo28Q78',  # <--- нижний регистр
+    'API_SECRET': 'uVA4Atu__utlqWO1ehZhIo28Q78', 
 }
 
-
-# Celery настройки DISABLED FOR MVP
 CELERY_TASK_ALWAYS_EAGER = True
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -124,11 +118,8 @@ LANGUAGES = [
 
 LOCALE_PATHS = [BASE_DIR / 'locale']
 
-# ✅ Static файлы
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-
-# ✅ Media файлы через Cloudinary
 MEDIA_URL = '/media/'
 DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
@@ -171,9 +162,6 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
 }
 
-
-
-# ✅ Twilio и Telegram
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
