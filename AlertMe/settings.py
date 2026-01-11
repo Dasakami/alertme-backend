@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='your-secret-key-change-in-production')
 DEBUG = config('DEBUG', default=False, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,192.168.68.219,10.122.0.53,10.231.17.53,alertme-ihww.onrender.com,alertme-backend.vercel.app').split(',')
-
+CORS_ALLOW_ALL_ORIGINS = True 
 INSTALLED_APPS = [
     'daphne',
     'django.contrib.admin',
@@ -25,6 +25,10 @@ INSTALLED_APPS = [
     'django_redis',
     'drf_spectacular',
     'channels',
+    # ✅ Cloudinary для хранения медиа
+    'cloudinary_storage',
+    'cloudinary',
+    # Apps
     'accounts',
     'sos',
     'contacts',
@@ -74,41 +78,14 @@ DATABASES = {
     }
 }
 
-# Для продакшн используйте PostgreSQL:
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': config('DB_NAME', default='alertme'),
-#         'USER': config('DB_USER', default='postgres'),
-#         'PASSWORD': config('DB_PASSWORD', default='password'),
-#         'HOST': config('DB_HOST', default='127.0.0.1'),
-#         'PORT': config('DB_PORT', default='5432'),
-#     }
-# }
-
-# Redis URL из Docker Desktop (localhost:6379)
-# DISABLED FOR MVP - using synchronous task execution instead
-# REDIS_BASE_URL = config('REDIS_URL', default='redis://localhost:6379')
-
-# DISABLED - Using synchronous execution instead
-# CACHES = {
-#     'default': {
-#         'BACKEND': 'django_redis.cache.RedisCache',
-#         'LOCATION': f'{REDIS_BASE_URL}/1',
-#         'OPTIONS': {
-#             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-#             'SOCKET_CONNECT_TIMEOUT': 5,
-#             'SOCKET_TIMEOUT': 5,
-#         }
-#     }
-# }
-
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'unique-snowflake',
     }
 }
+
+# ✅ Email настройки
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
@@ -118,29 +95,15 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='yomg xwfw xbtm wshy
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='AlertMe <ddasakami@gmail.com>')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': 'dan9pfqk1',  # <--- нижний регистр
+    'API_KEY': '127738592126977',
+    'API_SECRET': 'uVA4Atu__utlqWO1ehZhIo28Q78',  # <--- нижний регистр
+}
 
-
-# DISABLED - Not using WebSockets for MVP
-# CHANNEL_LAYERS = {
-#     'default': {
-#         'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#         'CONFIG': {
-#             'hosts': [(config('REDIS_HOST', default='localhost'), 6379)],
-#         },
-#     },
-# }
 
 # Celery настройки DISABLED FOR MVP
-# All tasks are now synchronous, no broker needed
-# CELERY_BROKER_URL = f'{REDIS_BASE_URL}/0'
-# CELERY_RESULT_BACKEND = f'{REDIS_BASE_URL}/0'
-# CELERY_ACCEPT_CONTENT = ['json']
-# CELERY_TASK_SERIALIZER = 'json'
-# CELERY_RESULT_SERIALIZER = 'json'
-# CELERY_TASK_TRACK_STARTED = True
-# CELERY_TASK_TIME_LIMIT = 30 * 60
 CELERY_TASK_ALWAYS_EAGER = True
-
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -161,20 +124,13 @@ LANGUAGES = [
 
 LOCALE_PATHS = [BASE_DIR / 'locale']
 
+# ✅ Static файлы
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-
-USE_S3 = config('USE_S3', default=False, cast=bool)
-if USE_S3:
-    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID')
-    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY')
-    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME')
-    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='us-east-1')
-    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+# ✅ Media файлы через Cloudinary
+MEDIA_URL = '/media/'
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 AUTHENTICATION_BACKENDS = [
     'accounts.backends.PhoneNumberBackend',
@@ -215,13 +171,12 @@ SPECTACULAR_SETTINGS = {
     'SERVE_INCLUDE_SCHEMA': False,
 }
 
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://127.0.0.1:3000,http://127.0.0.1:8081,http://10.122.0.53:8000'
-).split(',')
+
+
+# ✅ Twilio и Telegram
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
-TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')  # Формат: +1234567890
+TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='7205482794:AAFstGWp1aOoLS_L_TNVX74aQzgwGDgKQy8')
 SITE_URL = config('SITE_URL', default='https://alertme-ihww.onrender.com')
 FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')

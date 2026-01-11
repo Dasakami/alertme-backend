@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
+from cloudinary_storage.storage import VideoMediaCloudinaryStorage, MediaCloudinaryStorage
 
 
 class SOSAlert(models.Model):
@@ -19,8 +20,21 @@ class SOSAlert(models.Model):
     address = models.TextField(blank=True)
     map_link = models.URLField(max_length=500, blank=True)
     
-    audio_file = models.FileField(upload_to='sos/audio/%Y/%m/%d/', blank=True, null=True)
-    video_file = models.FileField(upload_to='sos/video/%Y/%m/%d/', blank=True, null=True)
+    # # ✅ Cloudinary поля для аудио и видео
+    # audio_file = CloudinaryField(
+    #     'audio',
+    #     resource_type='auto',
+    #     folder='alertme/sos/audio',
+    #     null=True,
+    #     blank=True,
+    #     # Опции для аудио
+    #     overwrite=True,
+    #     invalidate=True,
+    # )
+    
+        
+    audio_file = models.FileField(upload_to='sos/audio/%Y/%m/%d/', blank=True, null=True, storage=VideoMediaCloudinaryStorage())
+    video_file = models.FileField(upload_to='sos/video/%Y/%m/%d/', blank=True, null=True, storage=VideoMediaCloudinaryStorage())
     
     activation_method = models.CharField(max_length=50, choices=[
         ('button', 'Button Press'),
@@ -47,6 +61,20 @@ class SOSAlert(models.Model):
 
     def __str__(self):
         return f"SOS-{self.id} by {self.user.phone_number} - {self.status}"
+    
+    @property
+    def audio_url(self):
+        """Получить URL аудио файла"""
+        if self.audio_file:
+            return self.audio_file.url
+        return None
+    
+    @property
+    def video_url(self):
+        """Получить URL видео файла"""
+        if self.video_file:
+            return self.video_file.url
+        return None
 
 
 class SOSNotification(models.Model):
@@ -62,6 +90,7 @@ class SOSNotification(models.Model):
         ('sms', 'SMS'),
         ('push', 'Push Notification'),
         ('email', 'Email'),
+        ('telegram', 'Telegram'),
     ]
 
     sos_alert = models.ForeignKey(SOSAlert, on_delete=models.CASCADE, related_name='notifications')
@@ -115,5 +144,3 @@ class ActivityTimer(models.Model):
 
     def __str__(self):
         return f"Timer-{self.id} by {self.user.phone_number} - {self.status}"
-    
-
