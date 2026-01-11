@@ -213,16 +213,12 @@
 </head>
 <body>
     <div class="container">
-        <!-- Header -->
         <div class="header">
             <div class="header-icon">🚨</div>
             <h1>SOS Сигнал #{{ sos.id }}</h1>
             <p>Экстренное оповещение</p>
         </div>
-
-        <!-- Content -->
         <div class="content">
-            <!-- SOS Info -->
             <div class="info-card">
                 <h2>📋 Информация о сигнале</h2>
                 
@@ -238,7 +234,7 @@
                             {% if sos.status == 'active' %}
                                 🔴 Активен
                             {% elif sos.status == 'resolved' %}
-                                ✅ Решен
+                                 Решен
                             {% elif sos.status == 'cancelled' %}
                                 ⚫ Отменен
                             {% else %}
@@ -275,8 +271,6 @@
                 </div>
                 {% endif %}
             </div>
-
-            <!-- Media Section -->
             <div class="media-section">
                 {% if audio_url or video_url %}
                     {% if audio_url %}
@@ -315,8 +309,6 @@
                 {% endif %}
             </div>
         </div>
-
-        <!-- Footer -->
         <div class="footer">
             <p><strong>AlertMe</strong> - Приложение безопасности</p>
             <p>Экстренные уведомления и помощь</p>

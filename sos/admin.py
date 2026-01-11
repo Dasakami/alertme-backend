@@ -1,4 +1,3 @@
-# sos/admin.py
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
@@ -50,7 +49,6 @@ class SOSAlertAdmin(admin.ModelAdmin):
     )
     
     def user_link(self, obj):
-        """Ссылка на пользователя"""
         url = reverse('admin:accounts_user_change', args=[obj.user.id])
         return format_html(
             '<a href="{}">{}</a>',
@@ -125,7 +123,6 @@ class SOSAlertAdmin(admin.ModelAdmin):
     def map_preview(self, obj):
         """Превью карты"""
         if obj.latitude and obj.longitude:
-            # Embed Google Maps
             map_url = f"https://www.google.com/maps/search/?api=1&query={obj.latitude},{obj.longitude}"
             return format_html(
                 '<iframe width="100%" height="300" frameborder="0" style="border:0; border-radius: 8px;" '
@@ -189,7 +186,7 @@ class SOSAlertAdmin(admin.ModelAdmin):
                 <strong>📊 Всего уведомлений:</strong> {stats['total']}
             </div>
             <div style="margin-bottom: 10px;">
-                <strong style="color: #059669;">✅ Отправлено:</strong> {stats['sent']}
+                <strong style="color: #059669;"> Отправлено:</strong> {stats['sent']}
             </div>
             <div>
                 <strong style="color: #dc2626;">❌ Не удалось:</strong> {stats['failed']}

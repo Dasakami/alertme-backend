@@ -2,7 +2,6 @@ from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from .models import SOSAlert, ActivityTimer, SOSNotification
 from contacts.serializers import EmergencyContactSerializer
-from decimal import Decimal
 
 
 class SOSNotificationSerializer(serializers.ModelSerializer):
@@ -91,7 +90,7 @@ class ActivityTimerSerializer(serializers.ModelSerializer):
                  'check_in_message', 'time_remaining', 'created_at']
         read_only_fields = ['id', 'start_time', 'end_time', 'created_at']
     
-    @extend_schema_field(serializers.IntegerField)  # ИСПРАВЛЕНО
+    @extend_schema_field(serializers.IntegerField)  
     def get_time_remaining(self, obj) -> int:
         if obj.status == 'active':
             from django.utils import timezone

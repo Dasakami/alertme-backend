@@ -1,7 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
-from cloudinary_storage.storage import VideoMediaCloudinaryStorage, MediaCloudinaryStorage
+from cloudinary_storage.storage import VideoMediaCloudinaryStorage
 
 
 class SOSAlert(models.Model):
@@ -16,23 +16,9 @@ class SOSAlert(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
     latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    location_accuracy = models.FloatField(null=True, blank=True)  # in meters
+    location_accuracy = models.FloatField(null=True, blank=True)
     address = models.TextField(blank=True)
     map_link = models.URLField(max_length=500, blank=True)
-    
-    # # ✅ Cloudinary поля для аудио и видео
-    # audio_file = CloudinaryField(
-    #     'audio',
-    #     resource_type='auto',
-    #     folder='alertme/sos/audio',
-    #     null=True,
-    #     blank=True,
-    #     # Опции для аудио
-    #     overwrite=True,
-    #     invalidate=True,
-    # )
-    
-        
     audio_file = models.FileField(upload_to='sos/audio/%Y/%m/%d/', blank=True, null=True, storage=VideoMediaCloudinaryStorage())
     video_file = models.FileField(upload_to='sos/video/%Y/%m/%d/', blank=True, null=True, storage=VideoMediaCloudinaryStorage())
     
@@ -64,14 +50,12 @@ class SOSAlert(models.Model):
     
     @property
     def audio_url(self):
-        """Получить URL аудио файла"""
         if self.audio_file:
             return self.audio_file.url
         return None
     
     @property
     def video_url(self):
-        """Получить URL видео файла"""
         if self.video_file:
             return self.video_file.url
         return None

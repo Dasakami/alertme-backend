@@ -6,8 +6,7 @@ User = get_user_model()
 
 
 def calculate_distance(lat1, lon1, lat2, lon2):
-    """Calculate distance between two points using Haversine formula"""
-    R = 6371000  # Earth's radius in meters
+    R = 6371000 
     
     lat1, lon1, lat2, lon2 = map(radians, [float(lat1), float(lon1), 
                                             float(lat2), float(lon2)])
@@ -22,12 +21,9 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 
 
 def check_geozone_events(user_id, location_id):
-    """Check if user entered or exited any geozones"""
     try:
         user = User.objects.get(id=user_id)
         current_location = LocationHistory.objects.get(id=location_id)
-        
-        # Get active geozones for this user
         geozones = Geozone.objects.filter(user=user, is_active=True)
         
         for geozone in geozones:
@@ -39,19 +35,14 @@ def check_geozone_events(user_id, location_id):
             )
             
             is_inside = distance <= geozone.radius
-            
-            # Get last event for this geozone
             last_event = GeozoneEvent.objects.filter(
                 user=user,
                 geozone=geozone
             ).order_by('-timestamp').first()
-            
-            # Determine if we need to create an event
             if last_event:
                 was_inside = last_event.event_type == 'enter'
                 
                 if is_inside and not was_inside and geozone.notify_on_enter:
-                    # User entered zone
                     event = GeozoneEvent.objects.create(
                         user=user,
                         geozone=geozone,
@@ -62,7 +53,6 @@ def check_geozone_events(user_id, location_id):
                     send_geozone_notification(event.id)
                 
                 elif not is_inside and was_inside and geozone.notify_on_exit:
-                    # User exited zone
                     event = GeozoneEvent.objects.create(
                         user=user,
                         geozone=geozone,
@@ -72,7 +62,6 @@ def check_geozone_events(user_id, location_id):
                     )
                     send_geozone_notification(event.id)
             else:
-                # First time checking, only create enter event if inside
                 if is_inside and geozone.notify_on_enter:
                     event = GeozoneEvent.objects.create(
                         user=user,
@@ -90,27 +79,20 @@ def check_geozone_events(user_id, location_id):
 
 
 def send_geozone_notification(event_id):
-    """Send notification for geozone event"""
     try:
         event = GeozoneEvent.objects.get(id=event_id)
         geozone = event.geozone
-        
-        # Get contacts for this geozone
         contacts = geozone.emergency_contacts.filter(is_active=True)
         
         if not contacts.exists():
-            # Use all emergency contacts if no specific ones set
             from contacts.models import EmergencyContact
             contacts = EmergencyContact.objects.filter(
                 user=event.user,
                 is_active=True
             )
-        
-        # Send notifications
         for contact in contacts:
             message = _generate_geozone_message(event)
             
-            # Import SMS service
             from notifications.sms_service import SMSService
             from sos.models import SOSNotification
             
@@ -120,8 +102,6 @@ def send_geozone_notification(event_id):
                 notification_type='sms',
                 content=message
             )
-            
-            # Send SMS synchronously
             sms_service = SMSService()
             success = sms_service.send_sms(
                 to_phone=str(contact.phone_number),

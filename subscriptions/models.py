@@ -131,16 +131,10 @@ class ActivationCode(models.Model):
     """Коды активации подписок"""
     code = models.CharField(max_length=20, unique=True, db_index=True)
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.CASCADE, related_name='activation_codes')
-    
-    # Информация о платеже
     telegram_user_id = models.BigIntegerField(null=True, blank=True)
     payment_amount = models.IntegerField(help_text='Сумма в Telegram Stars')
-    
-    # Статусы
     is_active = models.BooleanField(default=True, db_index=True)
     is_used = models.BooleanField(default=False, db_index=True)
-    
-    # Кто активировал
     activated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.SET_NULL, 
@@ -149,8 +143,6 @@ class ActivationCode(models.Model):
         related_name='activated_codes'
     )
     activated_at = models.DateTimeField(null=True, blank=True, db_index=True)
-    
-    # Временные метки
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     
@@ -168,7 +160,6 @@ class ActivationCode(models.Model):
     
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            # Код действителен 30 дней
             self.expires_at = timezone.now() + timedelta(days=30)
         super().save(*args, **kwargs)
     
@@ -192,7 +183,6 @@ class ActivationCode(models.Model):
             else:
                 raise ValueError('Код недействителен')
         
-        # Проверяем не активирован ли уже пользователь с этим планом
         existing_subscription = UserSubscription.objects.filter(
             user=user,
             plan=self.plan,
@@ -200,12 +190,10 @@ class ActivationCode(models.Model):
         ).first()
         
         if existing_subscription and existing_subscription.end_date > timezone.now():
-            # Пролонгируем подписку на 30 дней
             existing_subscription.end_date = existing_subscription.end_date + timedelta(days=30)
             existing_subscription.save(update_fields=['end_date', 'updated_at'])
             subscription = existing_subscription
         else:
-            # Создаем или обновляем подписку
             subscription, created = UserSubscription.objects.update_or_create(
                 user=user,
                 defaults={
@@ -218,13 +206,11 @@ class ActivationCode(models.Model):
                 }
             )
         
-        # Отмечаем код как использованный
         self.is_used = True
         self.activated_by = user
         self.activated_at = timezone.now()
         self.save(update_fields=['is_used', 'activated_by', 'activated_at', 'updated_at'])
         
-        # ВАЖНО: Синхронизируем is_premium статус пользователя
         user.is_premium = (self.plan.plan_type != 'free' and subscription.status == 'active')
         user.save(update_fields=['is_premium'])
         

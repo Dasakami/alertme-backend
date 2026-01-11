@@ -6,14 +6,6 @@ logger = logging.getLogger(__name__)
 
 
 def send_sos_notifications_sync(sos_alert_id, contact_ids):
-    """
-    ✅ ПОЛНАЯ отправка SOS уведомлений
-    
-    Отправляет:
-    1. SMS на номер телефона
-    2. Email с аудио/видео вложениями
-    3. Создает уникальную страницу для просмотра медиа
-    """
     try:
         from .models import SOSAlert, SOSNotification
         from contacts.models import EmergencyContact
@@ -29,7 +21,6 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
         user = sos_alert.user
         user_name = f"{user.first_name} {user.last_name}".strip() or str(user.phone_number)
         
-        # Подготавливаем пути к медиа файлам
         audio_file_path = None
         video_file_path = None
         
@@ -49,9 +40,6 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
         email_count = 0
         
         for contact in contacts:
-            # ═══════════════════════════════════════════════════════════════
-            # 1. ОТПРАВКА SMS
-            # ═══════════════════════════════════════════════════════════════
             notif = SOSNotification.objects.create(
                 sos_alert=sos_alert,
                 contact=contact,
@@ -69,7 +57,6 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                 has_video=bool(sos_alert.video_file)
             )
             
-            # Отправляем SMS с медиа URL
             media_urls = []
             if sos_alert.audio_file:
                 try:
@@ -97,10 +84,6 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                 notif.error_message = 'SMS delivery failed'
             
             notif.save()
-            
-            # ═══════════════════════════════════════════════════════════════
-            # 2. ОТПРАВКА EMAIL (если есть email у контакта)
-            # ═══════════════════════════════════════════════════════════════
             if contact.email:
                 email_notif = SOSNotification.objects.create(
                     sos_alert=sos_alert,
@@ -131,14 +114,14 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                 email_notif.save()
         
         logger.info(
-            f"✅ SOS уведомления отправлены: "
+            f" SOS уведомления отправлены: "
             f"SMS={success_count}/{len(contacts)}, "
             f"Email={email_count}/{len(contacts)}"
         )
         return True
         
     except Exception as e:
-        logger.error(f"❌ Ошибка отправки SOS уведомлений: {e}", exc_info=True)
+        logger.error(f" Ошибка отправки SOS уведомлений: {e}", exc_info=True)
         return False
 
 
@@ -211,9 +194,9 @@ def process_sos_media(sos_alert_id):
                     uploaded_at=timezone.now()
                 )
                 
-                logger.info(f"✅ Аудио обработано для SOS {sos_alert_id}")
+                logger.info(f" Аудио обработано для SOS {sos_alert_id}")
             except Exception as e:
-                logger.error(f"❌ Ошибка обработки аудио: {e}")
+                logger.error(f" Ошибка обработки аудио: {e}")
         
         if sos_alert.video_file:
             try:
@@ -229,14 +212,14 @@ def process_sos_media(sos_alert_id):
                     uploaded_at=timezone.now()
                 )
                 
-                logger.info(f"✅ Видео обработано для SOS {sos_alert_id}")
+                logger.info(f" Видео обработано для SOS {sos_alert_id}")
             except Exception as e:
-                logger.error(f"❌ Ошибка обработки видео: {e}")
+                logger.error(f" Ошибка обработки видео: {e}")
         
-        logger.info(f"✅ Медиа обработаны для SOS {sos_alert_id}")
+        logger.info(f" Медиа обработаны для SOS {sos_alert_id}")
         return True
     except Exception as e:
-        logger.error(f"❌ Ошибка обработки медиа: {e}")
+        logger.error(f" Ошибка обработки медиа: {e}")
         return False
 
 
@@ -281,11 +264,11 @@ def check_expired_timers():
                 count += 1
                 
             except Exception as e:
-                logger.error(f"❌ Ошибка обработки истекшего таймера {timer.id}: {e}")
+                logger.error(f" Ошибка обработки истекшего таймера {timer.id}: {e}")
         
-        logger.info(f"✅ Обработано истекших таймеров: {count}")
+        logger.info(f" Обработано истекших таймеров: {count}")
         return count
         
     except Exception as e:
-        logger.error(f"❌ Ошибка проверки таймеров: {e}")
+        logger.error(f" Ошибка проверки таймеров: {e}")
         return 0

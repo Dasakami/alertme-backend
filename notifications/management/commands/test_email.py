@@ -1,4 +1,3 @@
-# notifications/management/commands/test_email.py
 from django.core.management.base import BaseCommand
 from notifications.email_service import EmailService
 
@@ -23,6 +22,6 @@ class Command(BaseCommand):
         success = email_service.send_test_email(email)
         
         if success:
-            self.stdout.write(self.style.SUCCESS(f'✅ Email успешно отправлен!'))
+            self.stdout.write(self.style.SUCCESS(f'Email успешно отправлен!'))
         else:
-            self.stdout.write(self.style.ERROR(f'❌ Ошибка отправки email'))
+            self.stdout.write(self.style.ERROR(f'Ошибка отправки email'))
