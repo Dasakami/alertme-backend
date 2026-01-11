@@ -92,7 +92,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='kilin6786@gmail.com')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='yomg xwfw xbtm wshy')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='AlertMe <ddasakami@gmail.com>')
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='AlertMe <kilin6786@gmail.com>')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 CLOUDINARY_STORAGE = {
