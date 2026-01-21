@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 def send_sos_notifications_sync(sos_alert_id, contact_ids):
+    """Отправка SOS уведомлений (синхронная) - работает для обычного SOS и таймера"""
     try:
         from .models import SOSAlert, SOSNotification
         from contacts.models import EmergencyContact
@@ -21,25 +22,39 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
         user = sos_alert.user
         user_name = f"{user.first_name} {user.last_name}".strip() or str(user.phone_number)
         
+        # Проверяем наличие медиа файлов
         audio_file_path = None
         video_file_path = None
+        has_audio = False
+        has_video = False
         
         if sos_alert.audio_file:
+            has_audio = True
             try:
                 audio_file_path = sos_alert.audio_file.path
-            except:
-                pass
+                logger.info(f"🎤 Аудио файл найден: {audio_file_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось получить путь к аудио: {e}")
+                audio_file_path = None
         
         if sos_alert.video_file:
+            has_video = True
             try:
                 video_file_path = sos_alert.video_file.path
-            except:
-                pass
+                logger.info(f"🎬 Видео файл найден: {video_file_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось получить путь к видео: {e}")
+                video_file_path = None
+        
+        # Определяем тип активации
+        is_timer = sos_alert.activation_method == 'timer'
+        activation_text = "ТАЙМЕР ИСТЕК" if is_timer else "ЭКСТРЕННАЯ ТРЕВОГА"
         
         success_count = 0
         email_count = 0
         
         for contact in contacts:
+            # SMS уведомление (в консоль)
             notif = SOSNotification.objects.create(
                 sos_alert=sos_alert,
                 contact=contact,
@@ -53,8 +68,9 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                 longitude=float(sos_alert.longitude) if sos_alert.longitude else None,
                 address=sos_alert.address or None,
                 sos_alert_id=sos_alert_id,
-                has_audio=bool(sos_alert.audio_file),
-                has_video=bool(sos_alert.video_file)
+                has_audio=has_audio,
+                has_video=has_video,
+                is_timer=is_timer,
             )
             
             media_urls = []
@@ -84,6 +100,8 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                 notif.error_message = 'SMS delivery failed'
             
             notif.save()
+            
+            # EMAIL уведомление (ВАЖНО: с аудио если есть)
             if contact.email:
                 email_notif = SOSNotification.objects.create(
                     sos_alert=sos_alert,
@@ -92,6 +110,10 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                     content=f"SOS от {user_name} - Email"
                 )
                 
+                logger.info(f"📧 Отправка email на {contact.email}")
+                logger.info(f"🎤 Аудио: {'Да' if audio_file_path else 'Нет'}")
+                logger.info(f"📍 Координаты: {sos_alert.latitude}, {sos_alert.longitude}")
+                
                 email_success = email_service.send_sos_email(
                     to_emails=[contact.email],
                     user_name=user_name,
@@ -99,29 +121,34 @@ def send_sos_notifications_sync(sos_alert_id, contact_ids):
                     longitude=float(sos_alert.longitude) if sos_alert.longitude else None,
                     address=sos_alert.address,
                     sos_alert_id=sos_alert_id,
-                    audio_file_path=audio_file_path,
+                    audio_file_path=audio_file_path,  # ПЕРЕДАЕМ АУДИО
                     video_file_path=video_file_path,
+                    is_timer=is_timer,  # Передаем флаг таймера
                 )
                 
                 if email_success:
                     email_notif.status = 'sent'
                     email_notif.sent_at = timezone.now()
                     email_count += 1
+                    logger.info(f"✅ Email отправлен на {contact.email}")
                 else:
                     email_notif.status = 'failed'
                     email_notif.error_message = 'Email delivery failed'
+                    logger.error(f"❌ Ошибка отправки email на {contact.email}")
                 
                 email_notif.save()
         
         logger.info(
-            f" SOS уведомления отправлены: "
+            f"✅ SOS уведомления отправлены: "
             f"SMS={success_count}/{len(contacts)}, "
-            f"Email={email_count}/{len(contacts)}"
+            f"Email={email_count}/{len(contacts)}, "
+            f"Аудио={'Да' if has_audio else 'Нет'}, "
+            f"Тип={'Таймер' if is_timer else 'Кнопка'}"
         )
         return True
         
     except Exception as e:
-        logger.error(f" Ошибка отправки SOS уведомлений: {e}", exc_info=True)
+        logger.error(f"❌ Ошибка отправки SOS уведомлений: {e}", exc_info=True)
         return False
 
 
@@ -132,12 +159,17 @@ def _format_sos_message_fixed(
     address: str = None,
     sos_alert_id: int = None,
     has_audio: bool = False,
-    has_video: bool = False
+    has_video: bool = False,
+    is_timer: bool = False,
 ) -> str:
     """Форматирование SOS сообщения для SMS"""
     base_url = getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000').rstrip('/')
     
-    message = "🚨 ЭКСТРЕННАЯ ТРЕВОГА!\n\n"
+    if is_timer:
+        message = "⏰ ТАЙМЕР БЕЗОПАСНОСТИ ИСТЕК!\n\n"
+    else:
+        message = "🚨 ЭКСТРЕННАЯ ТРЕВОГА!\n\n"
+    
     message += f"{user_name} активировал SOS!\n\n"
     
     if address:
@@ -194,9 +226,9 @@ def process_sos_media(sos_alert_id):
                     uploaded_at=timezone.now()
                 )
                 
-                logger.info(f" Аудио обработано для SOS {sos_alert_id}")
+                logger.info(f"✅ Аудио обработано для SOS {sos_alert_id}")
             except Exception as e:
-                logger.error(f" Ошибка обработки аудио: {e}")
+                logger.error(f"❌ Ошибка обработки аудио: {e}")
         
         if sos_alert.video_file:
             try:
@@ -212,14 +244,14 @@ def process_sos_media(sos_alert_id):
                     uploaded_at=timezone.now()
                 )
                 
-                logger.info(f" Видео обработано для SOS {sos_alert_id}")
+                logger.info(f"✅ Видео обработано для SOS {sos_alert_id}")
             except Exception as e:
-                logger.error(f" Ошибка обработки видео: {e}")
+                logger.error(f"❌ Ошибка обработки видео: {e}")
         
-        logger.info(f" Медиа обработаны для SOS {sos_alert_id}")
+        logger.info(f"✅ Медиа обработаны для SOS {sos_alert_id}")
         return True
     except Exception as e:
-        logger.error(f" Ошибка обработки медиа: {e}")
+        logger.error(f"❌ Ошибка обработки медиа: {e}")
         return False
 
 
@@ -264,11 +296,11 @@ def check_expired_timers():
                 count += 1
                 
             except Exception as e:
-                logger.error(f" Ошибка обработки истекшего таймера {timer.id}: {e}")
+                logger.error(f"❌ Ошибка обработки истекшего таймера {timer.id}: {e}")
         
-        logger.info(f" Обработано истекших таймеров: {count}")
+        logger.info(f"✅ Обработано истекших таймеров: {count}")
         return count
         
     except Exception as e:
-        logger.error(f" Ошибка проверки таймеров: {e}")
+        logger.error(f"❌ Ошибка проверки таймеров: {e}")
         return 0

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlertMe - Безопасность всегда с вами</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+
+        .header {
+            padding: 60px 20px;
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 72px;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            font-size: 56px;
+            font-weight: 500;
+            margin-bottom: 16px;
+        }
+
+        .tagline {
+            font-size: 24px;
+            opacity: 0.9;
+            margin-bottom: 40px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 60px;
+        }
+
+        .feature-card {
+            background: rgba(255,255,255,0.15);
+            border-radius: 16px;
+            padding: 32px;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-8px);
+            background: rgba(255,255,255,0.25);
+        }
+
+        .feature-card .icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .feature-card h3 {
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+
+        .feature-card p {
+            font-size: 16px;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .download-section {
+            text-align: center;
+            padding: 60px 20px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            margin-bottom: 60px;
+            backdrop-filter: blur(10px);
+        }
+
+        .download-section h2 {
+            font-size: 36px;
+            margin-bottom: 24px;
+        }
+
+        .download-buttons {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 32px;
+            background: white;
+            color: #667eea;
+            text-decoration: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+
+        .download-btn .material-icons {
+            font-size: 32px;
+        }
+
+        .links-section {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .links-section h3 {
+            font-size: 28px;
+            margin-bottom: 24px;
+        }
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .link-card {
+            background: rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 24px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .link-card:hover {
+            background: rgba(255,255,255,0.25);
+            transform: translateX(8px);
+        }
+
+        .link-card .material-icons {
+            font-size: 32px;
+        }
+
+        .link-card span {
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            opacity: 0.8;
+        }
+
+        .footer p {
+            margin: 8px 0;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 36px;
+            }
+
+            .tagline {
+                font-size: 18px;
+            }
+
+            .features {
+                grid-template-columns: 1fr;
+            }
+
+            .download-buttons {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🚨</div>
+        <h1>AlertMe</h1>
+        <p class="tagline">Безопасность всегда с вами</p>
+    </div>
+
+    <div class="container">
+        <div class="features">
+            <div class="feature-card">
+                <span class="material-icons icon">emergency</span>
+                <h3>SOS сигнал</h3>
+                <p>Мгновенная отправка сигнала тревоги вашим контактам одним нажатием</p>
+            </div>
+
+            <div class="feature-card">
+                <span class="material-icons icon">timer</span>
+                <h3>Таймер безопасности</h3>
+                <p>Запись аудио и автоматическая отправка SOS при истечении времени</p>
+            </div>
+
+            <div class="feature-card">
+                <span class="material-icons icon">location_on</span>
+                <h3>Геолокация</h3>
+                <p>Автоматическая отправка точного местоположения и адреса</p>
+            </div>
+
+            <div class="feature-card">
+                <span class="material-icons icon">mic</span>
+                <h3>Аудио запись</h3>
+                <p>Запись окружающих звуков для отправки вашим контактам</p>
+            </div>
+
+            <div class="feature-card">
+                <span class="material-icons icon">email</span>
+                <h3>Уведомления</h3>
+                <p>Отправка по SMS, Email и Telegram с медиа файлами</p>
+            </div>
+
+            <div class="feature-card">
+                <span class="material-icons icon">place</span>
+                <h3>Геозоны</h3>
+                <p>Уведомления при входе/выходе из определенных зон</p>
+            </div>
+        </div>
+
+        <div class="download-section">
+            <h2>Скачать приложение</h2>
+            <div class="download-buttons">
+                <a href="#" class="download-btn">
+                    <span class="material-icons">android</span>
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8;">Доступно в</div>
+                        <div>Google Play</div>
+                    </div>
+                </a>
+                <a href="#" class="download-btn">
+                    <span class="material-icons">apple</span>
+                    <div>
+                        <div style="font-size: 12px; opacity: 0.8;">Скачать в</div>
+                        <div>App Store</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="links-section">
+            <h3>Полезные ссылки</h3>
+            <div class="links-grid">
+                <a href="/privacy-policy" class="link-card">
+                    <span class="material-icons">privacy_tip</span>
+                    <span>Политика конфиденциальности</span>
+                </a>
+                <a href="/account-deletion" class="link-card">
+                    <span class="material-icons">delete_forever</span>
+                    <span>Удаление аккаунта</span>
+                </a>
+                <a href="/api/docs" class="link-card">
+                    <span class="material-icons">api</span>
+                    <span>API документация</span>
+                </a>
+                <a href="mailto:kilin6786@gmail.com" class="link-card">
+                    <span class="material-icons">support_agent</span>
+                    <span>Поддержка</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>© 2025 AlertMe. Все права защищены.</p>
+        <p>Безопасность всегда с вами</p>
+        <p style="margin-top: 16px;">
+            📧 <a href="mailto:kilin6786@gmail.com" style="color: white;">kilin6786@gmail.com</a>
+        </p>
+    </div>
+</body>
+</html>

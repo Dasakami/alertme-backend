@@ -3,7 +3,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.utils.html import strip_tags
-from typing import Optional, List
+from typing import List
 import os
 
 logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ class EmailService:
         sos_alert_id: int = None,
         audio_file_path: str = None,
         video_file_path: str = None,
+        is_timer: bool = False,  # НОВЫЙ ПАРАМЕТР
     ) -> bool:
         try:
             google_maps_url = None
@@ -34,8 +35,19 @@ class EmailService:
             if sos_alert_id:
                 base_url = getattr(settings, 'SITE_URL', 'https://alertme-ihww.onrender.com').rstrip('/')
                 media_url = f"{base_url}/api/media/sos/{sos_alert_id}/"
+            
+            # Определяем заголовок и тип тревоги
+            if is_timer:
+                alert_type = "⏰ ТАЙМЕР БЕЗОПАСНОСТИ ИСТЕК"
+                subject = f'⏰ Таймер безопасности истек - {user_name}'
+            else:
+                alert_type = "🚨 ЭКСТРЕННАЯ ТРЕВОГА"
+                subject = f'🚨 ЭКСТРЕННАЯ ТРЕВОГА от {user_name}!'
+            
             context = {
                 'user_name': user_name,
+                'alert_type': alert_type,
+                'is_timer': is_timer,
                 'address': address or 'Неизвестно',
                 'latitude': latitude,
                 'longitude': longitude,
@@ -45,12 +57,12 @@ class EmailService:
                 'has_video': bool(video_file_path),
                 'timestamp': None, 
             }
+            
             html_content = render_to_string(
                 'notifications/sos_email.html',
                 context
             )
             text_content = strip_tags(html_content)
-            subject = f'🚨 ЭКСТРЕННАЯ ТРЕВОГА от {user_name}!'
             
             email = EmailMultiAlternatives(
                 subject=subject,
@@ -59,32 +71,44 @@ class EmailService:
                 to=to_emails,
             )
             email.attach_alternative(html_content, "text/html")
+            
+            # ВАЖНО: Прикрепляем аудио если есть
             if audio_file_path and os.path.exists(audio_file_path):
-                with open(audio_file_path, 'rb') as f:
-                    email.attach(
-                        filename=f'sos_audio_{sos_alert_id}.aac',
-                        content=f.read(),
-                        mimetype='audio/aac'
-                    )
-                logger.info(f"📎 Аудио прикреплено к email")
+                try:
+                    with open(audio_file_path, 'rb') as f:
+                        email.attach(
+                            filename=f'sos_audio_{sos_alert_id}.aac',
+                            content=f.read(),
+                            mimetype='audio/aac'
+                        )
+                    logger.info(f"📎 Аудио прикреплено к email: {audio_file_path}")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка прикрепления аудио: {e}")
+            
             if video_file_path and os.path.exists(video_file_path):
-                with open(video_file_path, 'rb') as f:
-                    email.attach(
-                        filename=f'sos_video_{sos_alert_id}.mp4',
-                        content=f.read(),
-                        mimetype='video/mp4'
-                    )
-                logger.info(f"📎 Видео прикреплено к email")
+                try:
+                    with open(video_file_path, 'rb') as f:
+                        email.attach(
+                            filename=f'sos_video_{sos_alert_id}.mp4',
+                            content=f.read(),
+                            mimetype='video/mp4'
+                        )
+                    logger.info(f"📎 Видео прикреплено к email: {video_file_path}")
+                except Exception as e:
+                    logger.error(f"❌ Ошибка прикрепления видео: {e}")
+            
             email.send(fail_silently=False)
             
             logger.info(
-                f" SOS email отправлен на {len(to_emails)} адресов: "
-                f"{', '.join(to_emails)}"
+                f"✅ SOS email отправлен на {len(to_emails)} адресов: "
+                f"{', '.join(to_emails)} "
+                f"(Тип: {'Таймер' if is_timer else 'Кнопка'}, "
+                f"Аудио: {'Да' if audio_file_path else 'Нет'})"
             )
             return True
             
         except Exception as e:
-            logger.error(f" Ошибка отправки SOS email: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка отправки SOS email: {e}", exc_info=True)
             return False
     
     @staticmethod
@@ -103,9 +127,9 @@ class EmailService:
                 fail_silently=False,
             )
             
-            logger.info(f" Тестовый email отправлен на {to_email}")
+            logger.info(f"✅ Тестовый email отправлен на {to_email}")
             return True
             
         except Exception as e:
-            logger.error(f" Ошибка отправки тестового email: {e}", exc_info=True)
+            logger.error(f"❌ Ошибка отправки тестового email: {e}", exc_info=True)
             return False

@@ -1,14 +1,11 @@
-import hashlib
 import logging
 import os
 from django.conf import settings
 from django.core.files.storage import default_storage
-from django.urls import reverse
-from typing import Optional, Dict, Tuple
+from typing import Optional,  Tuple
 import uuid
 
 logger = logging.getLogger(__name__)
-
 
 class MediaService:
     SUPPORTED_AUDIO_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/webm']

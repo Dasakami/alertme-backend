@@ -55,6 +55,7 @@ urlpatterns = [
     path('auth/verify-sms/', VerifySMSView.as_view(), name='verify-sms'),
     path('auth/login/', CustomTokenObtainView.as_view(), name='login'),
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('', include(router.urls)),
 
     path('users/me/', UserProfileViewSet.as_view({'get': 'me'}), name='user-me'),
     path('users/update-profile/', UserProfileViewSet.as_view({
