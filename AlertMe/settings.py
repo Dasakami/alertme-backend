@@ -5,9 +5,9 @@ from datetime import timedelta
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = config('SECRET_KEY', default='your-secret-key-change-in-production')
+SECRET_KEY = config('SECRET_KEY', default='my-secret-key')
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = ['*', '.vercel.app', 'alertme-ihww.onrender.com']
+ALLOWED_HOSTS = ['*', 'alertme-ihww.onrender.com']
 CORS_ALLOW_ALL_ORIGINS = True 
 INSTALLED_APPS = [
     'daphne',
@@ -216,3 +216,18 @@ LOGGING = {
         },
     },
 }
+
+# ============================================
+# NIKITA SMS SETTINGS (smspro.nikita.kg)
+# ============================================
+
+# Логин от smspro.nikita.kg
+NIKITA_SMS_LOGIN = config('NIKITA_SMS_LOGIN', default='globalhit')
+
+# Пароль от smspro.nikita.kg
+NIKITA_SMS_PASSWORD = config('NIKITA_SMS_PASSWORD', default='gohZJrUW')
+
+# Имя отправителя (нужно согласовать с администратором)
+NIKITA_SMS_SENDER = config('NIKITA_SMS_SENDER', default='SMSPRO.KG')
+
+# Если логин/пароль не указаны - SMS будут выводиться в консоль
