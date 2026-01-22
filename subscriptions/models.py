@@ -1,4 +1,3 @@
-   
 from django.db import models
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _
@@ -18,6 +17,13 @@ class SubscriptionPlan(models.Model):
     
     price_monthly = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     price_yearly = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    
+    # Цена в Telegram Stars
+    price_stars = models.IntegerField(
+        default=100,
+        verbose_name='Price in Telegram Stars',
+        help_text='Цена подписки в Telegram Stars'
+    )
     
     features = models.JSONField(default=dict)
     max_contacts = models.IntegerField(default=1)
@@ -85,6 +91,7 @@ class PaymentTransaction(models.Model):
         ('mobile_mega', 'MegaCom'),
         ('mobile_beeline', 'Beeline'),
         ('card', 'Bank Card'),
+        ('telegram_stars', 'Telegram Stars'),
     ]
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payments')
@@ -96,6 +103,10 @@ class PaymentTransaction(models.Model):
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES)
     transaction_id = models.CharField(max_length=255, unique=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    # Для Telegram Stars
+    telegram_payment_charge_id = models.CharField(max_length=255, blank=True, null=True)
+    telegram_user_id = models.BigIntegerField(blank=True, null=True)
     
     provider_response = models.JSONField(default=dict, blank=True)
     error_message = models.TextField(blank=True)
@@ -133,8 +144,24 @@ class ActivationCode(models.Model):
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.CASCADE, related_name='activation_codes')
     telegram_user_id = models.BigIntegerField(null=True, blank=True)
     payment_amount = models.IntegerField(help_text='Сумма в Telegram Stars')
+    
+    # Связь с транзакцией оплаты
+    payment_transaction = models.ForeignKey(
+        PaymentTransaction,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='activation_codes'
+    )
+    
     is_active = models.BooleanField(default=True, db_index=True)
     is_used = models.BooleanField(default=False, db_index=True)
+    is_test = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text='Тестовый код для админа'
+    )
+    
     activated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, 
         on_delete=models.SET_NULL, 
@@ -153,10 +180,12 @@ class ActivationCode(models.Model):
         indexes = [
             models.Index(fields=['code', 'is_active']),
             models.Index(fields=['is_used', 'expires_at']),
+            models.Index(fields=['is_test', 'telegram_user_id']),
         ]
     
     def __str__(self):
-        return f"{self.code} - {self.plan.name} ({'USED' if self.is_used else 'ACTIVE'})"
+        test_label = ' [TEST]' if self.is_test else ''
+        return f"{self.code} - {self.plan.name} ({'USED' if self.is_used else 'ACTIVE'}){test_label}"
     
     def save(self, *args, **kwargs):
         if not self.expires_at:
@@ -209,9 +238,78 @@ class ActivationCode(models.Model):
         self.is_used = True
         self.activated_by = user
         self.activated_at = timezone.now()
-        self.save(update_fields=['is_used', 'activated_by', 'activated_at', 'updated_at'])
+        self.save(update_fields=['is_used', 'activated_by', 'activated_at'])
         
         user.is_premium = (self.plan.plan_type != 'free' and subscription.status == 'active')
         user.save(update_fields=['is_premium'])
         
         return subscription
+
+
+class BotSettings(models.Model):
+    """Настройки Telegram бота"""
+    
+    # Админы бота (Telegram User IDs через запятую)
+    admin_telegram_ids = models.TextField(
+        default='',
+        help_text='Telegram User IDs админов через запятую (например: 123456789,987654321)'
+    )
+    
+    # Режим работы
+    test_mode_enabled = models.BooleanField(
+        default=False,
+        help_text='Включить тестовый режим для всех пользователей'
+    )
+    
+    # Настройки цен
+    default_price_stars = models.IntegerField(
+        default=100,
+        help_text='Цена по умолчанию в Telegram Stars'
+    )
+    
+    # Продолжительность подписки
+    subscription_days = models.IntegerField(
+        default=30,
+        help_text='Количество дней подписки'
+    )
+    
+    # Срок действия кодов
+    code_expiration_hours = models.IntegerField(
+        default=24,
+        help_text='Срок действия кода активации в часах'
+    )
+    
+    # Статистика
+    total_payments_received = models.IntegerField(default=0)
+    total_codes_generated = models.IntegerField(default=0)
+    total_codes_activated = models.IntegerField(default=0)
+    
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = _('Bot Settings')
+        verbose_name_plural = _('Bot Settings')
+    
+    def __str__(self):
+        return f"Bot Settings (Updated: {self.updated_at})"
+    
+    @classmethod
+    def get_settings(cls):
+        """Получить или создать настройки"""
+        settings, _ = cls.objects.get_or_create(id=1)
+        return settings
+    
+    def is_admin(self, telegram_user_id):
+        """Проверка, является ли пользователь админом"""
+        if not self.admin_telegram_ids:
+            return False
+        admin_ids = [int(id.strip()) for id in self.admin_telegram_ids.split(',') if id.strip()]
+        return telegram_user_id in admin_ids
+    
+    def get_active_price(self):
+        """Получить актуальную цену"""
+        try:
+            plan = SubscriptionPlan.objects.get(plan_type='personal_premium')
+            return plan.price_stars
+        except SubscriptionPlan.DoesNotExist:
+            return self.default_price_stars
