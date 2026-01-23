@@ -162,24 +162,23 @@ def _format_sos_message_fixed(
     has_video: bool = False,
     is_timer: bool = False,
 ) -> str:
-    """Форматирование SOS сообщения для SMS"""
     base_url = getattr(settings, 'SITE_URL', 'http://127.0.0.1:8000').rstrip('/')
     
     if is_timer:
-        message = "⏰ ТАЙМЕР БЕЗОПАСНОСТИ ИСТЕК!\n\n"
+        message = "ТАЙМЕР БЕЗОПАСНОСТИ ИСТЕК!\n\n"
     else:
-        message = "🚨 ЭКСТРЕННАЯ ТРЕВОГА!\n\n"
+        message = "ТРЕВОГА!\n\n"
     
-    message += f"{user_name} активировал SOS!\n\n"
+    message += f"{user_name} жардам керек SOS \n\n"
     
-    if address:
-        message += f"📍 Адрес:\n{address}\n\n"
-    elif latitude and longitude:
-        message += f"📍 Координаты:\n{latitude:.4f}, {longitude:.4f}\n\n"
+    # if address:
+    #     message += f"📍 Адрес:\n{address}\n\n"
+    # # elif latitude and longitude:
+    # #     message += f"📍 Координаты:\n{latitude:.4f}, {longitude:.4f}\n\n"
     
     if latitude and longitude:
         google_maps_url = f"https://www.google.com/maps/search/?api=1&query={latitude},{longitude}"
-        message += f"🗺️ Карта:\n{google_maps_url}\n\n"
+        message += f"Карта:\n{google_maps_url}\n\n"
     
     if (has_audio or has_video) and sos_alert_id:
         media_url = f"{base_url}/api/media/sos/{sos_alert_id}/"
@@ -189,18 +188,15 @@ def _format_sos_message_fixed(
         if has_video:
             media_types.append("видео")
         
-        message += f"🎬 Медиа ({', '.join(media_types)}):\n{media_url}\n\n"
+        message += f"Медиа ({', '.join(media_types)}):\n{media_url}\n\n"
     
     now = timezone.now()
-    message += f"⏰ Время: {now.strftime('%H:%M, %d.%m.%Y')}\n\n"
-    message += "❗ ПОМОГИТЕ ЕМУ СРОЧНО!\n"
-    message += "Это автоматическое сообщение из AlertMe"
+    # message += f"Время: {now.strftime('%H:%M, %d.%m.%Y')}\n\n"
     
     return message
 
 
 def send_sos_notifications(sos_alert_id, contact_ids):
-    """Отправка SOS уведомлений (синхронная)"""
     return send_sos_notifications_sync(sos_alert_id, contact_ids)
 
 

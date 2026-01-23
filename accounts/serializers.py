@@ -4,6 +4,7 @@ from .models import SMSVerification, UserDevice
 from django.utils import timezone
 from datetime import timedelta
 from phonenumber_field.serializerfields import PhoneNumberField as PhoneNumberSerializerField
+import random
 
 User = get_user_model()
 
@@ -84,9 +85,11 @@ class SendSMSSerializer(serializers.Serializer):
     
     def create(self, validated_data):
         phone_number = validated_data['phone_number']
-        code = '123456'
+        
+        code = str(random.randint(100000, 999999))
         
         expires_at = timezone.now() + timedelta(minutes=10)
+        
         SMSVerification.objects.filter(
             phone_number=phone_number,
             is_verified=False
@@ -98,8 +101,10 @@ class SendSMSSerializer(serializers.Serializer):
             expires_at=expires_at
         )
         
-        print(f" ТЕСТОВЫЙ КОД для {phone_number}: {code}")
-        print(f" Истекает: {expires_at}")
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"📱 Сгенерирован код для {phone_number}: {code}")
+        logger.info(f"⏰ Истекает: {expires_at}")
         
         return sms_verification
 
