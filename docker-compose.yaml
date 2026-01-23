@@ -1,14 +1,32 @@
+version: "3.9"
+
 services:
   web:
     build: .
-    container_name: app
-    ports:
-      - "8000:8000"
+    container_name: alertme_web
+    command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
       - sqlite_data:/app/db
+    ports:
+      - "8000:8000"
     environment:
       - DEBUG=1
+      - DJANGO_SETTINGS_MODULE=AlertMe.settings
+    restart: unless-stopped
+
+  bot:
+    build: ./bot
+    container_name: alertme_bot
+    command: python main.py
+    volumes:
+      - ./bot:/app
+      - ../:/app_alertme  # чтобы бот видел Django проект
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DJANGO_SETTINGS_MODULE=AlertMe.settings
+    depends_on:
+      - web
     restart: unless-stopped
 
 volumes:

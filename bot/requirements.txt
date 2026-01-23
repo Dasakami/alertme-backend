@@ -1,0 +1,5 @@
+Django>=4.2
+python-telegram-bot>=20.4
+asgiref>=3.7
+psycopg2-binary>=2.9  # если используешь PostgreSQL
+python-dotenv>=1.0.0   # для .env
