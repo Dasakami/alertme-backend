@@ -10,9 +10,9 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-from main import is_user_admin, get_bot_settings,get_premium_plan, save_telegram_user, create_activation_code,create_payment_transaction
+from bot_utils import is_user_admin, get_bot_settings,get_premium_plan, save_telegram_user, create_activation_code,create_payment_transaction
 from admin import show_admin_panel,show_admin_stats, generate_test_code
-from .mangement import show_my_codes, prompt_activate_code
+from mangement import show_my_codes, prompt_activate_code
 from info_and_utils import generate_activation_code, show_info
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user

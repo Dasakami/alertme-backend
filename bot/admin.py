@@ -9,7 +9,8 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-from main import is_user_admin, get_premium_plan, get_bot_settings, get_user_model, create_activation_code
+from bot_utils import is_user_admin, get_premium_plan, get_bot_settings, create_activation_code
+from django.contrib.auth import get_user_model
 from info_and_utils import generate_activation_code
 async def show_admin_panel(query, context):
     is_admin = await is_user_admin(query.from_user.id)

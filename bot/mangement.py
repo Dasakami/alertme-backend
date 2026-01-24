@@ -5,7 +5,7 @@ from telegram.ext import (
     ContextTypes
 )
 import django
-from main import check_activation_code, get_user_codes 
+from bot_utils import check_activation_code, get_user_codes 
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'AlertMe.settings')
 django.setup()

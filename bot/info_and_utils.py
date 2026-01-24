@@ -6,7 +6,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-from main import  get_bot_settings,get_premium_plan
+from bot_utils import get_bot_settings, get_premium_plan
 async def show_info(query):
     user = query.from_user
     settings = await get_bot_settings()

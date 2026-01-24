@@ -7,7 +7,6 @@ class EmergencyContactSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmergencyContact
         fields = ['id', 'name', 'phone_number', 'email', 'relation', 
-                 'telegram_username', 
                  'is_primary', 'is_active', 'notification_preferences',
                  'created_at', 'updated_at']
         read_only_fields = ['id', 'created_at', 'updated_at']
