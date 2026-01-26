@@ -34,7 +34,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8423156547:AAHvgLbi5syDqaf5iWlvg82QU0qsHN5BEUs")
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8531623079:AAFd5TtvmkD29zGd9xW4yCLSTl8E69XgPNA")
 PREMIUM_PLAN_ID = 2
 
 

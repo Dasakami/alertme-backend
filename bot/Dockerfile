@@ -11,7 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Устанавливаем переменные окружения по умолчанию (можно переопределять)
 ENV DJANGO_SETTINGS_MODULE=AlertMe.settings
-ENV TELEGRAM_BOT_TOKEN="8423156547:AAHvgLbi5syDqaf5iWlvg82QU0qsHN5BEUs"
+ENV TELEGRAM_BOT_TOKEN="8531623079:AAFd5TtvmkD29zGd9xW4yCLSTl8E69XgPNA"
 ENV PYTHONPATH=/app:/app_alertme
 
 # Запуск бота
