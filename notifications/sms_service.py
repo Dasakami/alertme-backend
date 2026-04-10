@@ -43,6 +43,11 @@ class SMSService:
         if media_urls:
             full_message += "\n\n🎬 Медиа:\n" + "\n".join(media_urls)
         
+        # Тестовый режим: не отправляем через Nikita, только вывод в консоль
+        if getattr(settings, 'SMS_VERIFICATION_TEST_MODE', False):
+            logger.info("🧪 Тестовый режим SMS включен — Nikita не используется")
+            return self._send_via_console(to_phone, full_message, media_urls)
+        
         # Пытаемся отправить через Nikita SMS
         if self.nikita_sms.enabled:
             result = self.nikita_sms.send_sms(

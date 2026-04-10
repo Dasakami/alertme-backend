@@ -235,4 +235,9 @@ NIKITA_SMS_PASSWORD = config('NIKITA_SMS_PASSWORD', default='gohZJrUW')
 # Имя отправителя (нужно согласовать с администратором)
 NIKITA_SMS_SENDER = config('NIKITA_SMS_SENDER', default='SMSPRO.KG')
 
+# Тестовый режим отправки SMS для разработки
+# Включите SMS_VERIFICATION_TEST_MODE=True, чтобы не отправлять реальный SMS через Nikita
+SMS_VERIFICATION_TEST_MODE = config('SMS_VERIFICATION_TEST_MODE', default=True, cast=bool)
+SMS_VERIFICATION_TEST_CODE = config('SMS_VERIFICATION_TEST_CODE', default='123456')
+
 # Если логин/пароль не указаны - SMS будут выводиться в консоль

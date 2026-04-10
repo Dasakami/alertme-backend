@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from .models import SMSVerification, UserDevice
 from django.utils import timezone
 from datetime import timedelta
@@ -86,7 +87,10 @@ class SendSMSSerializer(serializers.Serializer):
     def create(self, validated_data):
         phone_number = validated_data['phone_number']
         
-        code = str(random.randint(100000, 999999))
+        if getattr(settings, 'SMS_VERIFICATION_TEST_MODE', False):
+            code = str(getattr(settings, 'SMS_VERIFICATION_TEST_CODE', '123456'))
+        else:
+            code = str(random.randint(100000, 999999))
         
         expires_at = timezone.now() + timedelta(minutes=10)
         
