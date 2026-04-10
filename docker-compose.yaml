@@ -22,7 +22,7 @@ services:
     command: python main.py
     volumes:
       - ./bot:/app
-      - ../:/app_alertme  # чтобы бот видел Django проект
+      - ../:/app_alertme  
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - DJANGO_SETTINGS_MODULE=AlertMe.settings

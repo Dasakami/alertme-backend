@@ -40,9 +40,9 @@ async def handle_code_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     activation = await check_activation_code(code)
     
     if activation:
-        test_label = " 🧪 [Тестовый]" if activation.is_test else ""
+        test_label = "  [Тестовый]" if activation.is_test else ""
         await update.message.reply_text(
-            f"✅ <b>Код действителен!{test_label}</b>\n\n"
+            f" <b>Код действителен!{test_label}</b>\n\n"
             f"План: <b>{activation.plan.name}</b>\n"
             f"Статус: <b>Готов к активации</b>\n\n"
             f"📱 Введите код <code>{code}</code> в приложении AlertMe:\n"
