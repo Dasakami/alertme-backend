@@ -170,7 +170,7 @@ SPECTACULAR_SETTINGS = {
 TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
 TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
 TWILIO_PHONE_NUMBER = config('TWILIO_PHONE_NUMBER', default='')
-TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='7205482794:AAFstGWp1aOoLS_L_TNVX74aQzgwGDgKQy8')
+TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 SITE_URL = config('SITE_URL', default='https://alertme-ihww.onrender.com')
 FIREBASE_CREDENTIALS_PATH = config('FIREBASE_CREDENTIALS_PATH', default='')
 

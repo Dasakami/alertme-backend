@@ -16,6 +16,7 @@ services:
     restart: unless-stopped
 
   bot:
+    profiles: ["telegram"]
     build: ./bot
     container_name: alertme_bot
     command: python main.py
